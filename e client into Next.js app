@@ -1,0 +1,191 @@
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'pnpm-lock.yaml', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/SESSION_LOG.md b/SESSION_LOG.md[m
+[1mindex cad188c..30ba94e 100644[m
+[1m--- a/SESSION_LOG.md[m
+[1m+++ b/SESSION_LOG.md[m
+[36m@@ -37,6 +37,17 @@[m
+   behaviour, `PostcodeSearch` will need loading/error/empty states and likely a[m
+   "use my location" affordance — built the input so that slots in cleanly.[m
+ [m
+[32m+[m[32m## 2026-06-04 — Wire Supabase client into app[m
+[32m+[m
+[32m+[m[32m- **What changed:** Installed `@supabase/supabase-js@2.107.0` and `@supabase/ssr@0.10.3` as production dependencies. Created `utils/supabase/client.ts` (browser client via `createBrowserClient`) and `utils/supabase/server.ts` (async server client via `createServerClient` with Next.js `cookies()`). Created `.env.local` with placeholder values (gitignored). Added a temporary `select count(*) from shops` query to `app/page.tsx` to prove the connection, rendered as a small gray debug line below the hero.[m
+[32m+[m[32m- **Why:** Wiring step before any real data features. Connection proof catches misconfigured env vars and PostgREST access issues before they show up buried in a feature.[m
+[32m+[m[32m- **Unsure about / flagged for review:**[m
+[32m+[m[32m  - **Data API exposure:** The April 2026 Supabase breaking change ("Tables not exposed to Data and GraphQL API automatically") means the `shops` table may need an explicit `GRANT SELECT ON shops TO anon, authenticated;` beyond just the RLS policy. The existing migration has the RLS policy but not the explicit grant. If the count query returns an error, that's the first thing to check in the Supabase dashboard under API settings.[m
+[32m+[m[32m  - **Env var name:** Using `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (the new recommended name from 2025+). The old `NEXT_PUBLIC_SUPABASE_ANON_KEY` also works until end of 2026 — whichever key format you copy from the Supabase dashboard, put it under the publishable var name.[m
+[32m+[m[32m  - **No middleware yet:** The server client swallows `setAll` errors from Server Components. This is fine now, but once auth is added, a middleware file (`middleware.ts`) is required to refresh sessions properly — the `setAll` catch block is a placeholder for that future state.[m
+[32m+[m[32m  - Docs for the `@supabase/ssr` `createServerClient` pattern required multiple fetches to confirm — the official quickstart pages didn't serve full code blocks via fetch. Cross-checked against the changelog and SSR README instead.[m
+[32m+[m[32m- **What I'd do differently:** Nothing structural. The client/server split in `utils/supabase/` is the right shape. When middleware is added, it will sit at `utils/supabase/middleware.ts` and `middleware.ts` at root — the helpers are already laid out to accept that cleanly.[m
+[32m+[m
+ ## 2026-06-01 — impeccable init (project design context)[m
+ [m
+ - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design[m
+[1mdiff --git a/package.json b/package.json[m
+[1mindex 5f0d92d..a3fee4c 100644[m
+[1m--- a/package.json[m
+[1m+++ b/package.json[m
+[36m@@ -9,6 +9,8 @@[m
+     "lint": "eslint"[m
+   },[m
+   "dependencies": {[m
+[32m+[m[32m    "@supabase/ssr": "^0.10.3",[m
+[32m+[m[32m    "@supabase/supabase-js": "^2.107.0",[m
+     "next": "16.2.6",[m
+     "react": "19.2.4",[m
+     "react-dom": "19.2.4"[m
+[1mdiff --git a/pnpm-lock.yaml b/pnpm-lock.yaml[m
+[1mindex 74995ea..26a3d85 100644[m
+[1m--- a/pnpm-lock.yaml[m
+[1m+++ b/pnpm-lock.yaml[m
+[36m@@ -8,6 +8,12 @@[m [mimporters:[m
+ [m
+   .:[m
+     dependencies:[m
+[32m+[m[32m      '@supabase/ssr':[m
+[32m+[m[32m        specifier: ^0.10.3[m
+[32m+[m[32m        version: 0.10.3(@supabase/supabase-js@2.107.0)[m
+[32m+[m[32m      '@supabase/supabase-js':[m
+[32m+[m[32m        specifier: ^2.107.0[m
+[32m+[m[32m        version: 2.107.0[m
+       next:[m
+         specifier: 16.2.6[m
+         version: 16.2.6(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)[m
+[36m@@ -438,6 +444,10 @@[m [mpackages:[m
+   '@rtsao/scc@1.1.0':[m
+     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}[m
+ [m
+[32m+[m[32m  '@supabase/auth-js@2.107.0':[m
+[32m+[m[32m    resolution: {integrity: sha512-XA7x+WIeIvuC3GTZ2ey67QcBbGw4n+o5B7M+dMm9KT1lL3wX1B52DfEWW00WuPt/LnniJLLIn1WIm9YPtuxzKQ==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+   '@supabase/cli-darwin-arm64@2.104.0':[m
+     resolution: {integrity: sha512-cFCNtrdfDvaNFR28PEsokuZfxCFSfDJOrzKZOEAR7WbygNRRABd4ufw6GWGHm+djshM5nDkv72et+isTFK63kw==}[m
+     cpu: [arm64][m
+[36m@@ -482,6 +492,34 @@[m [mpackages:[m
+     cpu: [x64][m
+     os: [win32][m
+ [m
+[32m+[m[32m  '@supabase/functions-js@2.107.0':[m
+[32m+[m[32m    resolution: {integrity: sha512-iMtRUmEj1KOgQd/a3MR4hnBlPnZc62DW8+z8aPpnzbxWkexEZUVL2fSgvvp15gqFg1V55e2yMGqgK+yhSQxp5w==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+[32m+[m[32m  '@supabase/phoenix@0.4.2':[m
+[32m+[m[32m    resolution: {integrity: sha512-YSAGnmDAfuleFCVt3CeurQZAhxRfXWeZIIkwp7NhYzQ1UwW6ePSnzsFAiUm/mbCkfoCf70QQHKW/K6RKh52a4A==}[m
+[32m+[m
+[32m+[m[32m  '@supabase/postgrest-js@2.107.0':[m
+[32m+[m[32m    resolution: {integrity: sha512-7ARs47/tyIjX7T0Ive20d4NY8zQYXsP5/P07jJWxffSIM2gpnSnGRnL/Fe15GPbdjsW2sTYeckHcyaoKbM6yWQ==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+[32m+[m[32m  '@supabase/realtime-js@2.107.0':[m
+[32m+[m[32m    resolution: {integrity: sha512-cF2KYdR3JIn9YlWGeluY9S0G+otqTdL6hB8GzpatlEIY6fZudCcyFo6Dc3+X9tjeb+x9XcIyNAk9qhNAknjH1A==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+[32m+[m[32m  '@supabase/ssr@0.10.3':[m
+[32m+[m[32m    resolution: {integrity: sha512-ux2CJgX89h0Fz2lY7ZNafNG2SkXpyRc5dz77K9eKeBLPdtywQixKwIuetDeIViAJBp/buOUVmgj8PVesOklNpw==}[m
+[32m+[m[32m    peerDependencies:[m
+[32m+[m[32m      '@supabase/supabase-js': ^2.105.3[m
+[32m+[m
+[32m+[m[32m  '@supabase/storage-js@2.107.0':[m
+[32m+[m[32m    resolution: {integrity: sha512-/X8OOVwKBn8aVKuHAGOz2yLA0d2OauqhVuy4mNtN+o7wttHOgx1/j+pqOzlsjmhOHrYykF6AJNZhs3gKZzcMUw==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+[32m+[m[32m  '@supabase/supabase-js@2.107.0':[m
+[32m+[m[32m    resolution: {integrity: sha512-ChKzdlWVweMUUhr0U79JhMmgm1haS/C5JquaiCDr70JaGARRtjjoY9rkIheXWybXxTSNzRiQs3Sk8IAg1HS3ZA==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+   '@swc/helpers@0.5.15':[m
+     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}[m
+ [m
+[36m@@ -921,6 +959,10 @@[m [mpackages:[m
+   convert-source-map@2.0.0:[m
+     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}[m
+ [m
+[32m+[m[32m  cookie@1.1.1:[m
+[32m+[m[32m    resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}[m
+[32m+[m[32m    engines: {node: '>=18'}[m
+[32m+[m
+   cross-spawn@7.0.6:[m
+     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}[m
+     engines: {node: '>= 8'}[m
+[36m@@ -1294,6 +1336,10 @@[m [mpackages:[m
+   hermes-parser@0.25.1:[m
+     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}[m
+ [m
+[32m+[m[32m  iceberg-js@0.8.1:[m
+[32m+[m[32m    resolution: {integrity: sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA==}[m
+[32m+[m[32m    engines: {node: '>=20.0.0'}[m
+[32m+[m
+   ignore@5.3.2:[m
+     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}[m
+     engines: {node: '>= 4'}[m
+[36m@@ -2377,6 +2423,10 @@[m [msnapshots:[m
+ [m
+   '@rtsao/scc@1.1.0': {}[m
+ [m
+[32m+[m[32m  '@supabase/auth-js@2.107.0':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      tslib: 2.8.1[m
+[32m+[m
+   '@supabase/cli-darwin-arm64@2.104.0':[m
+     optional: true[m
+ [m
+[36m@@ -2401,6 +2451,39 @@[m [msnapshots:[m
+   '@supabase/cli-windows-x64@2.104.0':[m
+     optional: true[m
+ [m
+[32m+[m[32m  '@supabase/functions-js@2.107.0':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      tslib: 2.8.1[m
+[32m+[m
+[32m+[m[32m  '@supabase/phoenix@0.4.2': {}[m
+[32m+[m
+[32m+[m[32m  '@supabase/postgrest-js@2.107.0':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      tslib: 2.8.1[m
+[32m+[m
+[32m+[m[32m  '@supabase/realtime-js@2.107.0':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      '@supabase/phoenix': 0.4.2[m
+[32m+[m[32m      tslib: 2.8.1[m
+[32m+[m
+[32m+[m[32m  '@supabase/ssr@0.10.3(@supabase/supabase-js@2.107.0)':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      '@supabase/supabase-js': 2.107.0[m
+[32m+[m[32m      cookie: 1.1.1[m
+[32m+[m
+[32m+[m[32m  '@supabase/storage-js@2.107.0':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      iceberg-js: 0.8.1[m
+[32m+[m[32m      tslib: 2.8.1[m
+[32m+[m
+[32m+[m[32m  '@supabase/supabase-js@2.107.0':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      '@supabase/auth-js': 2.107.0[m
+[32m+[m[32m      '@supabase/functions-js': 2.107.0[m
+[32m+[m[32m      '@supabase/postgrest-js': 2.107.0[m
+[32m+[m[32m      '@supabase/realtime-js': 2.107.0[m
+[32m+[m[32m      '@supabase/storage-js': 2.107.0[m
+[32m+[m
+   '@swc/helpers@0.5.15':[m
+     dependencies:[m
+       tslib: 2.8.1[m
+[36m@@ -2823,6 +2906,8 @@[m [msnapshots:[m
+ [m
+   convert-source-map@2.0.0: {}[m
+ [m
+[32m+[m[32m  cookie@1.1.1: {}[m
+[32m+[m
+   cross-spawn@7.0.6:[m
+     dependencies:[m
+       path-key: 3.1.1[m
+[36m@@ -3344,6 +3429,8 @@[m [msnapshots:[m
+     dependencies:[m
+       hermes-estree: 0.25.1[m
+ [m
+[32m+[m[32m  iceberg-js@0.8.1: {}[m
+[32m+[m
+   ignore@5.3.2: {}[m
+ [m
+   ignore@7.0.5: {}[m

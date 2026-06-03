@@ -37,6 +37,17 @@
   behaviour, `PostcodeSearch` will need loading/error/empty states and likely a
   "use my location" affordance — built the input so that slots in cleanly.
 
+## 2026-06-04 — Wire Supabase client into app
+
+- **What changed:** Installed `@supabase/supabase-js@2.107.0` and `@supabase/ssr@0.10.3` as production dependencies. Created `utils/supabase/client.ts` (browser client via `createBrowserClient`) and `utils/supabase/server.ts` (async server client via `createServerClient` with Next.js `cookies()`). Created `.env.local` with placeholder values (gitignored). Added a temporary `select count(*) from shops` query to `app/page.tsx` to prove the connection, rendered as a small gray debug line below the hero.
+- **Why:** Wiring step before any real data features. Connection proof catches misconfigured env vars and PostgREST access issues before they show up buried in a feature.
+- **Unsure about / flagged for review:**
+  - **Data API exposure:** The April 2026 Supabase breaking change ("Tables not exposed to Data and GraphQL API automatically") means the `shops` table may need an explicit `GRANT SELECT ON shops TO anon, authenticated;` beyond just the RLS policy. The existing migration has the RLS policy but not the explicit grant. If the count query returns an error, that's the first thing to check in the Supabase dashboard under API settings.
+  - **Env var name:** Using `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (the new recommended name from 2025+). The old `NEXT_PUBLIC_SUPABASE_ANON_KEY` also works until end of 2026 — whichever key format you copy from the Supabase dashboard, put it under the publishable var name.
+  - **No middleware yet:** The server client swallows `setAll` errors from Server Components. This is fine now, but once auth is added, a middleware file (`middleware.ts`) is required to refresh sessions properly — the `setAll` catch block is a placeholder for that future state.
+  - Docs for the `@supabase/ssr` `createServerClient` pattern required multiple fetches to confirm — the official quickstart pages didn't serve full code blocks via fetch. Cross-checked against the changelog and SSR README instead.
+- **What I'd do differently:** Nothing structural. The client/server split in `utils/supabase/` is the right shape. When middleware is added, it will sit at `utils/supabase/middleware.ts` and `middleware.ts` at root — the helpers are already laid out to accept that cleanly.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
