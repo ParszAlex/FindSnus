@@ -8,13 +8,13 @@
 */
 @theme {
   --color-bg: oklch(1 0 0);
-  --color-surface: oklch(0.985 0.004 110);
-  --color-border: oklch(0.91 0.008 110);
-  --color-ink: oklch(0.24 0.018 110);
-  --color-muted: oklch(0.46 0.025 110);
-  --color-primary: oklch(0.35 0.08 110);
-  --color-primary-hover: oklch(0.3 0.085 110);
-  --color-on-primary: oklch(0.99 0.004 110);
+  --color-surface: oklch(0.985 0 0);
+  --color-border: oklch(0.91 0 0);
+  --color-ink: oklch(0.24 0 0);
+  --color-muted: oklch(0.46 0 0);
+  --color-primary: oklch(0.40 0.14 255);
+  --color-primary-hover: oklch(0.35 0.145 255);
+  --color-on-primary: oklch(0.99 0 0);
 
   --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
 
