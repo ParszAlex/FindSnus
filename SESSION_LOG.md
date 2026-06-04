@@ -198,6 +198,47 @@
   mismatch was the real risk and was worth surfacing as a decision rather than
   guessing.
 
+## 2026-06-04 — Prove merged shops+listings shape (data-layer step 2/4)
+
+- **What changed:** Iterated the temporary `app/rpc-test/page.tsx` (client only —
+  no migration, `nearby_shops` untouched). It now does a two-step client-side
+  join: (1) `rpc("nearby_shops", …)` for shops + `distance_m`, (2) a second query
+  `from("listings").select("shop_id, strength_mg, price, last_confirmed_at,
+  source, brands(name)").in("shop_id", shopIds)` that embeds the brand **name**
+  via the `brand_id → brands` FK, then merges listings under each shop (grouped by
+  `shop_id`) and dumps the nested JSON. Added local `ShopRow` / `ListingRow` /
+  `MergedShop` types so the throwaway page is still strict-clean.
+- **Why:** Step 2 of 4 — prove the merged data shape the locator UI will consume
+  (per shop: its listings as brand name + strength + price), with the join done
+  in the client via PostgREST FK embedding rather than in SQL. Keeps
+  `nearby_shops` as the proven, listings-free primitive from step 1.
+- **Docs checked (not memory):** PostgREST nested select `relation(columns)` +
+  alias `alias:relation(...)` + FK disambiguation `relation!fk(...)` confirmed
+  current; `.in(column, array)` signature unchanged. Also probed the live embed
+  against remote before coding — `brands(name)` returns a single nested object
+  (many listings → one brand), which the code relies on.
+- **Verified two ways (not just "it compiled"):**
+  - A lightweight `supabase-js` Node script (same query path) against remote.
+  - The actual page in a real browser (Playwright): 4 shops, distance ascending,
+    each with 3 nested listings (12 total — matches the seed), every listing
+    `{brand:string, strength_mg:number, price:number}`, brand resolved to
+    "Nordic Spirit" (the one seeded brand), `error` null.
+- **Unsure about / flagged for review:**
+  - **Two round-trips, merged in the client** (not a single SQL join). Fine and
+    intentional for this step; if the listing volume per shop grows, revisit
+    whether `nearby_shops` should return listings or whether to page them.
+  - **Seed data is monochrome** — every listing is the same brand at one price,
+    so the proof exercises *shape*, not cross-brand/cross-price variety. Worth
+    seeding a second brand + varied prices before building the real comparison UI.
+  - The `as unknown as ListingRow[]` cast on the embedded select is because the
+    client is untyped (no generated DB types). Generating `Database` types would
+    remove the cast — deferred (no codegen tooling added without asking).
+  - Transient environment note: free disk on C: briefly read 0.11 GB mid-task
+    (one probe truncated with an ENOSPC error) then recovered to ~2 GB; the
+    browser proof ran clean. Flagging in case it recurs.
+- **What I'd do differently:** Nothing structural. The client-side merge is the
+  right call for this step; the open question is purely data variety in the seed.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
