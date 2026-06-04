@@ -239,6 +239,58 @@
 - **What I'd do differently:** Nothing structural. The client-side merge is the
   right call for this step; the open question is purely data variety in the seed.
 
+## 2026-06-04 — Seed a second brand (Velo) with varied stock + prices
+
+- **What changed:** New seed migration
+  `20260604165020_seed_second_brand.sql` (created via
+  `supabase migration new`, not hand-named). Inserts brand `Velo`
+  (idempotent `on conflict (name) do nothing`) and exactly 5 Velo listings
+  across the 4 existing shops: High St + Gartlea stock 6mg **and** 10mg,
+  Connor St stocks 6mg only, Coatbridge stocks none. Velo 6mg is a different
+  price at each stocking shop (5.49 / 5.50 / 5.95); Velo 10mg is 5.75 / 6.10.
+  Fully schema-qualified (`public.brands` / `public.shops` / `public.listings`),
+  no `set search_path` (Bug-2 lesson) — it does only INSERTs, no `ST_*`.
+  Links to shops by **name** via a `(shop_name, strength, price)` VALUES table
+  joined to `public.shops`, mirroring the NS seed's no-hardcoded-uuids pattern
+  (adapted from a uniform cross-join to a VALUES table because prices now vary).
+  A comment flags the prices as representative UK values, not live-verified.
+- **Why:** The monochrome NS seed (1 brand, £6.50 everywhere) can't validate a
+  comparison UI — nothing to compare. This gives real cross-brand / cross-price
+  data. Did **not** touch `nearby_shops`, the rpc-test page, or the immutable NS
+  seed (`235303`, already on remote).
+- **Verified by a clean `db reset` (the defined proof):** all SIX migrations
+  replay in order with no errors; post-reset state (authoritative — not a manual
+  apply) shows brands:2, shops:4, listings:17, Velo listings:5, Velo 6mg at 3
+  shops at 3 distinct prices (5.49/5.50/5.95), Velo 10mg 5.75/6.10, exactly 1
+  shop (Coatbridge) with zero Velo, RLS true on all three tables in `public`.
+- **The incident (honest):** Disk read 2.14 GB — under the 3 GB line I was told
+  to stop at — so I stopped and asked; you chose "run reset now at 2.14 GB."
+  That reset triggered Docker Desktop to crash mid-run (the ENOSPC risk you'd
+  flagged): the local DB went down (connection refused) and, paradoxically, free
+  space jumped to ~18.7 GB as Docker's VM disk released. Recovery was exactly the
+  anticipated path: relaunched Docker Desktop, `supabase start`, then re-ran the
+  reset cleanly with ample space → green. So the *successful* proof ran at
+  ~18.7 GB, not 2.14 GB.
+- **Verification-tooling note:** `supabase db query` only executes ONE statement
+  per call (and each call is its own connection), so I couldn't run a
+  `begin…rollback` dry-run or apply the 2-statement migration in one shot. Before
+  the reset I sanity-checked the SQL by applying the two statements to the live
+  local DB and reading back the counts; that mutates local, but the subsequent
+  `db reset` wiped and replayed it cleanly, so the committed proof is the reset,
+  not the manual apply.
+- **Unsure about / flagged for review:**
+  - **Prices are representative, not real** (noted in a SQL comment). Fine for a
+    portfolio comparison UI; revisit if you ever want live-sourced prices.
+  - **Not pushed.** For the rpc-test page (which hits **remote**) to show Velo,
+    this migration must be pushed to remote — you said you'll handle that.
+  - Listings insert is a plain insert (no `on conflict`), matching the NS seed;
+    only meaningful on a clean replay, which is how seeds run. The 5 rows are
+    distinct on `unique(shop_id, brand_id, strength_mg)`.
+- **What I'd do differently:** Given the 3 GB guardrail, crossing it surfaced the
+  exact failure it was meant to prevent — though it self-recovered and ended
+  clean. Next time at low disk I'd reclaim space (or wait) *before* the reset
+  rather than during, to avoid the Docker crash detour.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
