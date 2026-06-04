@@ -48,6 +48,37 @@
   - Docs for the `@supabase/ssr` `createServerClient` pattern required multiple fetches to confirm — the official quickstart pages didn't serve full code blocks via fetch. Cross-checked against the changelog and SSR README instead.
 - **What I'd do differently:** Nothing structural. The client/server split in `utils/supabase/` is the right shape. When middleware is added, it will sit at `utils/supabase/middleware.ts` and `middleware.ts` at root — the helpers are already laid out to accept that cleanly.
 
+## 2026-06-04 — Make schema push-safe and restore read-only RLS migration
+
+- **What changed:** Two migration edits for reproducibility. (1) Added `set
+  search_path to extensions, public;` to the top of
+  `20260603230038_create_initial_schema.sql` so the PostGIS `geography` type
+  resolves under `db push` (direct connection), not only the Management API.
+  (2) The RLS block (enable + three `public read` SELECT policies) was
+  duplicated — it lived in `230038` while the dedicated
+  `20260603230602_enable_rls_read_only.sql` sat empty. Moved RLS out of `230038`
+  into `230602` so it's defined exactly once across the migration chain.
+- **Why:** As written, the requested task would have *created* a replay bug:
+  filling `230602` with RLS while `230038` already had it means a fresh `db
+  reset` replays both and dies on `policy ... already exists`. Single source of
+  truth fixes that. Remote already had correct RLS (from `230038`), so no remote
+  re-apply was needed or done — verified `rls_enabled=true` on all three tables,
+  3 SELECT policies, 0 write policies, before and after.
+- **Unsure about / flagged for review:**
+  - **Local replay proof not yet run.** The real "test, don't assume" proof —
+    `supabase start` + `supabase db reset` replaying `230038 → 230602 → 235303`
+    locally and confirming shops:4 / listings:12 / brands:1 / RLS on — is
+    **deferred**. This machine had no Docker, then no WSL2; installing WSL2
+    needs a reboot. Docker Desktop + WSL2 are now installed; run the proof in a
+    fresh session after reboot. Replay-safety is currently established by
+    inspection only (RLS defined once, search_path present).
+  - Editing an already-applied migration (`230038`) is normally something to
+    avoid, but here both `230038` and `230602` are applied on remote and the
+    net DB state is unchanged — this is purely a file reorganisation for clean
+    local replay / portfolio readability.
+- **What I'd do differently:** Nothing — the move is the correct fix. Only
+  open item is executing the local reset once the reboot is done.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design

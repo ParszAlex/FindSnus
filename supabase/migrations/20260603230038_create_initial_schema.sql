@@ -1,3 +1,7 @@
+-- geography type lives in the extensions schema; make it resolvable under
+-- `db push` (direct connection), not just the Management API.
+set search_path to extensions, public;
+
 -- brands first (listings will reference it)
 create table brands (
   id   uuid primary key default gen_random_uuid(),
@@ -28,17 +32,6 @@ create table listings (
   created_at        timestamptz  not null default now(),
   unique (shop_id, brand_id, strength_mg)
 );
--- put the bouncer on the door for all three tables
-alter table brands   enable row level security;
-alter table shops    enable row level security;
-alter table listings enable row level security;
 
--- the only name on the guest list: anyone may read
-create policy "public read brands"
-  on brands for select to anon, authenticated using (true);
-
-create policy "public read shops"
-  on shops for select to anon, authenticated using (true);
-
-create policy "public read listings"
-  on listings for select to anon, authenticated using (true);
+-- RLS (enable + read-only policies) lives in the next migration,
+-- 20260603230602_enable_rls_read_only.sql.
