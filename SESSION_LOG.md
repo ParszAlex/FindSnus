@@ -154,6 +154,50 @@
   tight radius that must exclude a known-nearby shop) is the right shape to
   prove a geo filter rather than just smoke-test it.
 
+## 2026-06-04 — Prove client → nearby_shops RPC path (data-layer step 1/4)
+
+- **What changed:** Added a temporary client component at `app/rpc-test/page.tsx`
+  that calls `supabase.rpc("nearby_shops", { in_lat, in_lng, in_radius_km })`
+  against hardcoded Airdrie-centre coords (55.8657, -3.9803) via the existing
+  browser client (`utils/supabase/client.ts`), and dumps `data`/`error` to the
+  page as `<pre>` + `console.log`. Also **pushed two pending migrations to
+  remote** (`supabase db push --include-all`): `20260603230000_enable_postgis`
+  (idempotent no-op — PostGIS was already enabled by hand on remote, logged
+  `extension "postgis" already exists, skipping`) and
+  `20260604123147_nearby_shops_function` (the function the test needs).
+- **Why:** Step 1 of wiring the data layer to the UI — confirm in isolation that
+  the client can reach the RPC and get correct rows back, before any map / real
+  input / listings join. No new project dependencies (`@supabase/ssr` +
+  `supabase-js` already installed).
+- **The blocker I hit (and surfaced before acting):** The env points at remote
+  (`tifcrkhhtlzwmowulmai`), but `nearby_shops` had only ever been applied
+  locally — exactly as the previous entry flagged ("remote untouched"). A direct
+  REST probe returned `404 PGRST202 (function not found)`, while the call shape
+  was already correct (PostgREST parsed `in_lat, in_lng`). So this was a
+  *deployment* gap, not a client bug. I stopped and asked rather than pushing
+  unprompted; you chose "push migration, test remote."
+- **Second bug, caught in-browser, not papered over:** the first route used the
+  task's example name `app/_rpc-test/` — but in the App Router a `_`-prefixed
+  folder is a **private folder excluded from routing**, so it 404'd. Renamed to
+  `app/rpc-test/` and it rendered.
+- **Verified (real browser via Playwright, not just curl):** page renders 4 rows,
+  `distance_m` ascending (318, 433, 2245, 2744 m — all < 4000), `error` is null,
+  and `console.log` shows the array + null error. Same 4 rows confirmed by a
+  direct REST probe to remote post-push.
+- **Unsure about / flagged for review:**
+  - **`app/rpc-test/` is temporary** and should be deleted once the real locator
+    UI consumes `nearby_shops` (it's labelled as such in a header comment).
+  - **Remote migration history is now in sync** through `123147` (push also
+    recorded `230000`). Remote DB state is unchanged by the postgis no-op; the
+    only real addition is the function.
+  - One-time: set up the vendored `playwright-skill` (installed Chromium into the
+    skill's own `node_modules`, which is gitignored — not a project dependency).
+  - Distances differ slightly from the prior entry's Test A because the coords
+    differ marginally (55.8657,-3.9803 vs 55.8663,-3.9810); shape is consistent.
+- **What I'd do differently:** Nothing structural. The deploy-vs-test-target
+  mismatch was the real risk and was worth surfacing as a decision rather than
+  guessing.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
