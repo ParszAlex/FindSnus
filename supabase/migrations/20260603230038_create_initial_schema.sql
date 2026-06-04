@@ -1,6 +1,7 @@
--- geography type lives in the extensions schema; make it resolvable under
--- `db push` (direct connection), not just the Management API.
-set search_path to extensions, public;
+-- The PostGIS `geography` type is schema-qualified below (extensions.geography)
+-- so it resolves without touching search_path. Do NOT add `set search_path to
+-- extensions, ...` here: it would make unqualified `create table` land these
+-- tables in `extensions` instead of `public`, hiding them from the Data API.
 
 -- brands first (listings will reference it)
 create table brands (
@@ -13,7 +14,7 @@ create table shops (
   name       text not null,
   address    text not null,
   postcode   text not null,
-  location   geography(Point, 4326) not null,
+  location   extensions.geography(Point, 4326) not null,
   source     text not null check (source in ('seed','community')),
   verified   boolean not null default false,
   created_at timestamptz not null default now(),

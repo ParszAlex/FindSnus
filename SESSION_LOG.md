@@ -79,6 +79,46 @@
 - **What I'd do differently:** Nothing — the move is the correct fix. Only
   open item is executing the local reset once the reboot is done.
 
+## 2026-06-04 — Add PostGIS extension migration and qualify geography type for replay safety
+
+- **What changed:** Ran the deferred local replay proof (Docker + WSL2 now
+  installed). The first `supabase db reset` failed: `type "geography" does not
+  exist`. Root cause — PostGIS had only ever been enabled by hand in the
+  dashboard, never in a migration, so a clean replay had no extension.
+  Fixes: (1) new migration `20260603230000_enable_postgis.sql` (sorts first)
+  running `create extension if not exists postgis with schema extensions;`.
+  (2) Schema-qualified the column type to `extensions.geography(Point, 4326)` in
+  `230038` so it resolves regardless of search_path.
+- **The real catch (a bug I'd introduced last task):** With those two fixes the
+  reset passed and counts were right (4/12/1) — but a verification query showed
+  all three tables had been created in the **`extensions`** schema, not
+  `public`. Cause: the `set search_path to extensions, public;` line I'd added
+  to `230038` in the previous task. With `extensions` first in the path,
+  unqualified `create table` lands tables there. The count query masked it
+  (`from shops` still resolves via the path), but it meant (a) replay didn't
+  reproduce remote, where tables are in `public`, and (b) PostgREST/the Data API
+  only exposes `public`, so the app couldn't read them. Removed that line
+  entirely — the qualified `extensions.geography` type makes it unnecessary.
+  This deviated from the prior task's "leave it; harmless" note, but the replay
+  proved it was not harmless. This is exactly what the local test exists to find.
+- **Verified (clean replay, `230000 → 230038 → 230602 → 235303`):** reset
+  completes with no errors; tables in **`public`**; RLS `true` on all three;
+  3 SELECT policies (`anon,authenticated`), 0 write policies; counts shops:4,
+  listings:12, brands:1.
+- **Unsure about / flagged for review:**
+  - **Remote vs. migrations drift, now understood:** remote was built with
+    PostGIS enabled manually and tables in `public`; the migration chain now
+    reproduces that *correctly* from scratch. Remote itself is unchanged (these
+    edits are file-only; not pushed). If you ever rebuild remote from
+    migrations, it will now match.
+  - The seed `235303` keeps its own `set search_path to extensions, public;` —
+    that's fine and needed: it only does INSERTs (never `create table`), and it
+    needs `extensions` in the path for the `::geography` cast and `ST_*`
+    functions. INSERTs still target `public` tables. No change made there.
+- **What I'd do differently:** I'd have caught the wrong-schema bug last task if
+  I'd verified the *schema* of the created tables, not just that a count query
+  ran. Lesson: when search_path is in play, check where objects actually land.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
