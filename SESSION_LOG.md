@@ -119,6 +119,41 @@
   I'd verified the *schema* of the created tables, not just that a count query
   ran. Lesson: when search_path is in play, check where objects actually land.
 
+## 2026-06-04 — Add nearby_shops PostGIS RPC function (§5.4 nearest-shops query)
+
+- **What changed:** New migration
+  `20260604123147_nearby_shops_function.sql` defining
+  `public.nearby_shops(in_lat, in_lng, in_radius_km default 10)` — a `language
+  sql`, `stable`, `security invoker` function that returns shops within a radius
+  of a point, ordered by distance ascending. Uses `ST_DWithin` on `geography`
+  for the radius filter and `ST_Distance` for `distance_m`; projects lat/lng
+  back out via `ST_Y`/`ST_X` on the `::geometry` cast. `execute` granted to
+  `anon, authenticated`.
+- **Why:** §5.4 — the core query the locator UI needs: "which shops are near
+  me, nearest first." `ST_DWithin` (not `ST_Distance < x`) so the GiST index on
+  `shops.location` can be used for the radius bound.
+- **Security/replay shape:** `set search_path = ''` (empty) on the function, so
+  every identifier is fully schema-qualified on purpose (`extensions.ST_*`,
+  `public.shops`). This is the Supabase-recommended hardening — an empty
+  search_path means the function can't be hijacked by a malicious schema on the
+  caller's path, and it makes the function replay-clean regardless of session
+  search_path. `security invoker` so it runs as the caller (RLS still applies).
+- **Proven by local replay + two tests (not just "it compiled"):**
+  - `db reset` replays all 5 migrations clean.
+  - Test A (10km from Airdrie centre `55.8663,-3.9810`): 4 rows, ascending —
+    High St 358m, Gartlea 397m, Connor St 2271m, Coatbridge 2720m. Correct
+    `ST_MakePoint(lng, lat)` ordering (swapped args would give huge distances or
+    0 rows).
+  - Test B (500m from High St Tesco's own coords): **exactly 1 row** (High St,
+    0m); the ~730m nearest neighbour is correctly excluded — proves the
+    `ST_DWithin` bound actually bounds.
+- **Unsure about / flagged for review:** Nothing blocking. Function is local +
+  file only; remote untouched. When the UI wires this up it'll call it via
+  `supabase.rpc('nearby_shops', { in_lat, in_lng, in_radius_km })`.
+- **What I'd do differently:** Nothing — the test pair (a positive radius and a
+  tight radius that must exclude a known-nearby shop) is the right shape to
+  prove a geo filter rather than just smoke-test it.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
