@@ -5,12 +5,22 @@
 // strengths + prices. No map, no cheapest-highlight yet — that's a later step.
 // Rendered on the home page only after the 18+ age gate is confirmed.
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import {
   getNearbyShopsWithListings,
   type Listing,
   type ShopWithListings,
 } from "@/lib/shops";
+
+// Leaflet touches `window` on import, so the map is client-only — never imported
+// on the server. A placeholder keeps the layout from jumping while it loads.
+const ShopMap = dynamic(() => import("./ShopMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-80 w-full rounded-lg border border-border bg-surface" />
+  ),
+});
 
 // Hardcoded Airdrie centre + radius, matching the proven /rpc-test call. A real
 // postcode / "use my location" input replaces these in a later step.
@@ -59,6 +69,9 @@ export default function Locator() {
             {shops.length} {shops.length === 1 ? "shop" : "shops"} within{" "}
             {RADIUS_KM} km, nearest first.
           </p>
+          <div className="mt-6">
+            <ShopMap shops={shops} center={[LAT, LNG]} zoom={12} />
+          </div>
           <ShopList shops={shops} />
         </>
       )}

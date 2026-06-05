@@ -392,6 +392,61 @@
 - **What I'd do differently:** Nothing within this unit's scope. If revisited, an
   AgeGate `onConfirm` callback would remove the poll.
 
+## 2026-06-05 — Leaflet map on the gated home, hardcoded coord (Unit B)
+
+- **New dependency (flagged, React-19-gated):** `react-leaflet@5.0.0` +
+  `leaflet@1.9.4` (prod) and `@types/leaflet@1.9.21` (dev). Pre-flight confirmed
+  `react@19.2.4`, so react-leaflet **5.x** is the correct line (4.x is React 18);
+  had React not been 19 I'd have stopped rather than downgrade. Free OSM tiles,
+  no API key — consistent with the locked stack.
+- **What changed:** New `components/ShopMap.tsx` (client-only) — a `MapContainer`
+  + OpenStreetMap `TileLayer` + one `Marker` per shop, rendered from the **same**
+  `getNearbyShopsWithListings` fetch the list uses (one data path, so pins and
+  list can't disagree). Each popup shows shop name, distance, and the per-brand
+  breakdown driven off the same brand-universe logic as the list, so Coatbridge's
+  popup reads "Not stocked here" for Velo exactly as its list card does. A small
+  `FitToMarkers` child fits the view to the markers (frames all four now, and
+  still works once the coord goes dynamic). `Locator` mounts it **above** the
+  existing list via `next/dynamic(() => import("./ShopMap"), { ssr: false })`
+  with a placeholder — Leaflet reads `window` on import, so it must never be
+  evaluated on the server. Still on the hardcoded Airdrie coord — search /
+  geolocation is Unit C; this proves the render pipe before swapping the input.
+- **The bug I caught and fixed (not papered over):** first browser run showed
+  four markers but with `src="undefined"` and zero-loaded icons. Cause: under
+  **Turbopack** a `*.png` import resolves at runtime to a **URL string**, not the
+  `StaticImageData` object that `next-env` types it as — so `iconUrl.src` was
+  `undefined`. `tsc` passed because the type said otherwise. Fixed with an
+  `assetUrl()` normaliser (handles string **or** `{ src }`); re-ran and icons
+  load from `/_next/static/media/marker-icon.*`. This is the known leaflet +
+  bundler icon-path issue — fixed properly, not left as broken squares.
+- **Verified (real browser, Playwright — discriminating, not "4 pins appeared"):**
+  - Tiles: 4/4 loaded from `tile.openstreetmap.org` (real map, not a grey box).
+  - Markers: exactly 4; all icons loaded (naturalWidth > 0, not 404).
+  - Per-shop truth matches the list: Gartlea popup Velo `6 mg £5.50 / 10 mg
+    £6.10`, High St `6 mg £5.49 / 10 mg £5.75`, Connor St `6 mg £5.95`,
+    **Coatbridge Velo "Not stocked here"** — i.e. a Velo-stocking shop lists Velo
+    while Coatbridge shows it absent, the same brand truth the list encodes.
+  - No console errors, no page errors, **no "window is not defined"**; dev-server
+    terminal compiled clean (the only `/undefined` 404s were the pre-fix icon run
+    and stop after the fix).
+- **Test-method note:** marker pointer-clicks were intercepted by the overlapping
+  open popup / auto-pan, so the verifier keyboard-activates each marker (they're
+  focusable `role="button"` — focus + Enter), which is overlay-independent. App
+  behaviour unchanged; this only affected how the test drives the map.
+- **Unsure about / flagged for review:**
+  - **Hardcoded coord still** (`55.8657, -3.9803`) — deliberate for Unit B. Real
+    postcode / "use my location" input is Unit C; the fetch + map don't change.
+  - **OSM tiles are third-party requests** from the client (each pan/zoom hits
+    `tile.openstreetmap.org`). Attribution is rendered as OSM's usage policy
+    requires. No key/cost; flag only as an external-dependency/privacy note.
+  - `formatDistance` / `formatPrice` are duplicated as two one-liners in
+    `ShopMap` (kept local so the client-only module is self-contained rather than
+    importing from the list component). Trivially de-dupable into `lib/` later.
+  - Map is `ssr: false`, so first paint shows a bordered placeholder box for a
+    frame before Leaflet hydrates — intentional (Leaflet can't SSR).
+- **What I'd do differently:** Nothing structural. If the formatters spread to a
+  third place I'd lift them into `lib/format.ts`; not worth it for two callers.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
