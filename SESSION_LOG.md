@@ -291,6 +291,61 @@
   clean. Next time at low disk I'd reclaim space (or wait) *before* the reset
   rather than during, to avoid the Docker crash detour.
 
+## 2026-06-05 — Shop list UI + extract fetch to lib/shops (step 3/4)
+
+- **What changed (one unit, two sub-steps):**
+  - **3a (pure move):** Extracted the RPC-call + client-side listings-join + nest
+    logic out of `app/rpc-test/page.tsx` into `lib/shops.ts` as
+    `getNearbyShopsWithListings(lat, lng, radiusKm)`, returning the §4 shape
+    (`{ ...shopCols, distance_m, listings: [{ brand, strength_mg, price }] }`) in
+    the RPC's distance-ascending order. The `nearby_shops` query and the
+    listings `select(... brands(name)).in("shop_id", …)` are byte-identical to
+    before. `rpc-test` now just calls the lib and dumps the result (still
+    temporary, **not deleted**).
+  - **3b (list UI):** New `app/shops/page.tsx` — a client component mirroring
+    rpc-test's fetch mechanism (no server/client refactor). Renders shops
+    nearest-first (no re-sort), name + sensibly-formatted distance (`320 m` /
+    `2.2 km`), listings grouped by brand with strengths ascending + GBP prices,
+    `Not stocked here` for a brand a shop lacks, and loading / error / empty
+    states. Styled with the existing OKLCH semantic tokens (`text-muted`,
+    `border-border`, `bg-surface`), not guessed `gray-*`.
+- **Deviation from the brief (flagged + approved):** The task said "new
+  `app/page.tsx`", but that file IS the landing page (`AgeGate` + `Hero` +
+  `SiteFooter`) and the `AgeGate` enforces CLAUDE.md's "Age gate (18+) on entry"
+  hard rule. Overwriting it would have dropped the age gate. I stopped and asked;
+  you chose a **new `/shops` route**, leaving the landing + age gate untouched.
+- **Design note — "Not stocked here":** the brand universe is derived from the
+  union of brands across the *returned* shops (not a hardcoded brand set, not a
+  separate brands fetch), so Coatbridge correctly shows Velo as not stocked
+  because Velo appears at other nearby shops. Limitation: a brand carried by *no*
+  nearby shop can't appear as "not stocked" anywhere — honest, since the result
+  set is all we know about. Revisit if/when brand filtering needs the full brand
+  list.
+- **Verified (real browser, Playwright — not "looks fine"):**
+  - 3a regression: `/rpc-test` JSON byte-identical to pre-extraction (Velo
+    present, 6mg 5.49/5.50/5.95, Coatbridge no Velo, error null).
+  - 3b success: 4 cards in order Gartlea→High St→Connor St→Coatbridge; distances
+    `320 m / 430 m / 2.2 km / 2.7 km`; every card lists both brands; Coatbridge
+    Velo = the single "Not stocked here"; prices £5.49/£5.50/£5.95/£5.75/£6.10/
+    £6.50 all present; no console/page errors; screenshot looks clean.
+  - 3b states: mocked the RPC to prove all three — `[]`→empty message, `500`→
+    error message, delayed→loading message.
+- **Docs:** No new doc lookups needed — both sub-steps reuse the client fetch
+  pattern already proven on this exact Next 16 / supabase-js stack in steps 1–2
+  (not from memory). Tailwind v4 `@theme`→utility resolution was confirmed by the
+  actual render, not assumed.
+- **Unsure about / flagged for review:**
+  - **`/shops` is not itself age-gated.** It relies on the gated landing as the
+    entry point; the gate is localStorage-persisted, so once `/shops` is linked
+    from the landing the gate carries over — but direct navigation to `/shops`
+    bypasses it. Revisit when routing/linking is finalised (middleware or a
+    shared gate wrapper).
+  - `rpc-test` is now redundant with `/shops` for the happy path but kept as the
+    raw-shape probe until the locator is settled.
+- **What I'd do differently:** Nothing structural. Step 4 (cheapest-highlight,
+  and likely wiring real input + the map) builds on `getNearbyShopsWithListings`
+  unchanged.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design
