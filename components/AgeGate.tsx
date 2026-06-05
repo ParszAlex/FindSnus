@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Wordmark from "./Wordmark";
 
-const STORAGE_KEY = "findsnus:age-confirmed";
+// The home page reads this same key to decide whether to mount the locator, so
+// it's exported here to keep a single source of truth (the gate still owns it).
+export const STORAGE_KEY = "findsnus:age-confirmed";
 
 type Status = "checking" | "asking" | "blocked" | "confirmed";
 

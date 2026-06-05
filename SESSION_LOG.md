@@ -346,6 +346,52 @@
   and likely wiring real input + the map) builds on `getNearbyShopsWithListings`
   unchanged.
 
+## 2026-06-05 — Consolidate locator onto gated home, remove /shops (Unit A)
+
+- **What changed:**
+  - **Extracted** the locator UI from `app/shops/page.tsx` into
+    `components/Locator.tsx` — a pure move (same `getNearbyShopsWithListings`
+    fetch, same hardcoded Airdrie coord, same render + states), export renamed
+    `ShopsPage` → `Locator`.
+  - **Rewrote `app/page.tsx`** as the gated home (now a Client Component). It
+    reads the AgeGate's existing localStorage key and: `null` while reading →
+    renders nothing; not confirmed → `<AgeGate />` only; confirmed →
+    `<Locator />`. The locator is **not mounted until confirmed**, so an
+    unconfirmed visitor's DOM has zero shop/brand data (absent, not hidden).
+  - **Reused the gate's key** by adding `export` to `STORAGE_KEY` in
+    `components/AgeGate.tsx` — the only change to that file; its logic and the
+    key value are untouched. Single source of truth, no duplicated magic string.
+  - **Deleted the `/shops` route** (`git rm app/shops/page.tsx`; dir gone).
+  - `app/rpc-test` left untouched (separate cleanup later).
+- **Why the poll:** the AgeGate writes the key in the same tab, where the
+  `storage` event does NOT fire. So the home polls localStorage (200 ms) while
+  unconfirmed to catch the confirm transition, plus a `storage` listener for the
+  cross-tab case; both tear down the moment confirmation is seen.
+- **Verified (real browser, Playwright):**
+  - Fresh context (no key): age gate shown; full page HTML contains none of
+    `Velo` / `Nordic Spirit` / `Nearby shops` / `£5.` / `£6.` — proven absent via
+    `page.content()`, not merely visually hidden.
+  - After clicking "Yes, I am 18 or over": four shops render in order
+    Gartlea → High St → Connor St → Coatbridge; Coatbridge's Velo row reads
+    "Not stocked here"; key becomes `true`.
+  - `/shops` returns HTTP 404. No page errors.
+- **Unsure about / flagged for review:**
+  - **The confirmed home now renders ONLY `<Locator />`** — the `Hero` and
+    `SiteFooter` (the latter carried the PRODUCT.md compliance framing) are no
+    longer on the page, per the explicit "confirmed → render `<Locator />`"
+    instruction. If that compliance footer should persist on the locator, say so
+    and I'll wrap it back in. `Hero.tsx` / `SiteFooter.tsx` / `PostcodeSearch.tsx`
+    are now unused (files kept, not deleted — out of scope); `Wordmark` is still
+    used by the AgeGate.
+  - `app/page.tsx` went from a Server Component to a Client Component (required
+    to read localStorage). Metadata still lives in `app/layout.tsx`, so nothing
+    was lost there.
+  - The 200 ms poll is a pragmatic same-tab sync. The cleaner alternative — an
+    `onConfirm` callback on the AgeGate — was deliberately not done because it
+    would change the gate's logic, which was out of scope.
+- **What I'd do differently:** Nothing within this unit's scope. If revisited, an
+  AgeGate `onConfirm` callback would remove the poll.
+
 ## 2026-06-01 — impeccable init (project design context)
 
 - **What changed:** Added `PRODUCT.md` at the repo root — the strategic design

@@ -1,9 +1,9 @@
 "use client";
 
-// Step 3 of 4 — the locator list. Consumes lib/shops.getNearbyShopsWithListings
-// (the same fetch proven on /rpc-test) and renders nearest-first shops with each
-// brand's strengths + prices. No map, no cheapest-highlight yet — that's step 4.
-// Lives at /shops (not /) so the age-gated landing stays the entry point.
+// The locator list. Consumes lib/shops.getNearbyShopsWithListings (the fetch
+// proven on /rpc-test) and renders nearest-first shops with each brand's
+// strengths + prices. No map, no cheapest-highlight yet — that's a later step.
+// Rendered on the home page only after the 18+ age gate is confirmed.
 
 import { useEffect, useState } from "react";
 import {
@@ -28,7 +28,7 @@ function formatPrice(price: number): string {
   return `£${price.toFixed(2)}`;
 }
 
-export default function ShopsPage() {
+export default function Locator() {
   const [shops, setShops] = useState<ShopWithListings[] | null>(null);
   const [error, setError] = useState<unknown>(null);
 
