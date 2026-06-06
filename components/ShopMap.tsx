@@ -25,6 +25,7 @@ import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ShopWithListings } from "@/lib/shops";
 import { buildStyle } from "@/lib/mapStyle";
+import { sheetHalfHeightPx } from "./MobileBottomSheet";
 import ShopPopup from "./ShopPopup";
 
 // The single brand blue, as a literal — MapLibre paints its own GL canvas/DOM
@@ -291,6 +292,23 @@ export default function ShopMap({
       essential: true,
     });
   }, [map, ready, hasLocation, recenterKey]);
+
+  // --- Centre the selected shop above the mobile sheet -----------------------
+  // A selection (list row or pin tap) snaps the mobile sheet to half, so ease
+  // the camera until the pin sits centred in the strip of map left visible
+  // above it — offset shifts the target up by half the sheet's height. Desktop
+  // (sm+) anchors a popup over the pin instead, so no camera move there.
+  useEffect(() => {
+    if (!map || !ready || selectedShopId === null) return;
+    if (window.matchMedia("(min-width: 640px)").matches) return; // Tailwind sm
+    const shop = allShops.find((s) => s.id === selectedShopId);
+    if (shop === undefined) return;
+    map.easeTo({
+      center: [shop.lng, shop.lat],
+      offset: [0, -sheetHalfHeightPx() / 2],
+      duration: 600,
+    });
+  }, [map, ready, selectedShopId, allShops]);
 
   // --- Shop markers (one per shop, state-coloured) --------------------------
   useEffect(() => {

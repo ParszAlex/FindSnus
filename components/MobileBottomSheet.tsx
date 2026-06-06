@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Listing, ShopWithListings } from "@/lib/shops";
 import { RADIUS_MILES } from "./LocatorControls";
 
@@ -18,12 +18,12 @@ type Props = {
   hasLocation: boolean;
 };
 
-// Sheet geometry. Half is 42dvh (capped) rather than a fixed px so the map
+// Sheet geometry. Half is 36dvh (capped) rather than a fixed px so the map
 // centre — where the user's location dot lands after a fly-to — stays visible
-// above the sheet: on an 844px viewport the sheet top sits at ~490px, ~67px
-// below centre (422px). Keep in sync with the h-[42dvh] max-h-[460px] classes.
+// above the sheet: on an 844px viewport the sheet top sits at ~540px, ~118px
+// below centre (422px). Keep in sync with the h-[36dvh] max-h-[460px] classes.
 const PEEK_HEIGHT_PX = 86;
-const HALF_HEIGHT_DVH = 42;
+const HALF_HEIGHT_DVH = 36;
 const HALF_HEIGHT_MAX_PX = 460;
 // Pointer movement below this is a tap (toggles the sheet); above it, a drag.
 const DRAG_THRESHOLD_PX = 5;
@@ -31,22 +31,31 @@ const DRAG_THRESHOLD_PX = 5;
 // direction regardless of how far it has travelled.
 const FLICK_VELOCITY_PX_PER_MS = 0.4;
 
-// Pixel equivalent of the half-state CSS height.
-function halfHeightPx(): number {
+// Pixel equivalent of the half-state CSS height. Exported for ShopMap, which
+// offsets its camera by half of this so a selected shop centres in the map
+// area left visible above the sheet.
+export function sheetHalfHeightPx(): number {
   return Math.min(
     (window.innerHeight * HALF_HEIGHT_DVH) / 100,
     HALF_HEIGHT_MAX_PX,
   );
 }
 
+// Live geometry of an in-progress drag — shared by the handle's pointer
+// handlers and the sheet body's native touch handlers.
 type DragState = {
-  pointerId: number;
   startY: number;
   startHeight: number;
   lastY: number;
   lastTime: number;
   velocity: number; // px/ms — positive when the finger is moving down
-  moved: boolean; // true once movement passes DRAG_THRESHOLD_PX
+};
+
+// Pointer-side tap-vs-drag arbitration for the handle (mouse + touch).
+type PointerProbe = {
+  pointerId: number;
+  startY: number;
+  dragging: boolean; // true once movement passes DRAG_THRESHOLD_PX
 };
 
 // Mirrors the formatDistance used in ShopList and ShopPopup.
@@ -103,7 +112,9 @@ export default function MobileBottomSheet({
   const [sheetState, setSheetState] = useState<"peek" | "half">("peek");
   const [dragging, setDragging] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const pointerRef = useRef<PointerProbe | null>(null);
   // A click event fires after every pointerup; this flags the one that
   // follows a real drag so it doesn't also toggle the sheet.
   const suppressClickRef = useRef(false);
@@ -160,65 +171,54 @@ export default function MobileBottomSheet({
     handleHandle();
   }
 
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+  // ── Drag core ── shared by the handle (pointer events, mouse + touch) and
+  // the sheet body (native touch listeners, attached in the effect below).
+  // Reads only refs and stable setters, so the callbacks never go stale.
+  const beginDrag = useCallback((y: number, time: number) => {
     const sheet = sheetRef.current;
     if (sheet === null) return;
-    suppressClickRef.current = false;
-    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = {
-      pointerId: e.pointerId,
-      startY: e.clientY,
+      startY: y,
       startHeight: sheet.getBoundingClientRect().height,
-      lastY: e.clientY,
-      lastTime: e.timeStamp,
+      lastY: y,
+      lastTime: time,
       velocity: 0,
-      moved: false,
     };
-  }
+    setDragging(true);
+  }, []);
 
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+  const moveDrag = useCallback((y: number, time: number) => {
     const drag = dragRef.current;
     const sheet = sheetRef.current;
-    if (drag === null || sheet === null || e.pointerId !== drag.pointerId) {
-      return;
-    }
+    if (drag === null || sheet === null) return;
 
-    const delta = drag.startY - e.clientY; // positive = finger moving up
-    if (!drag.moved) {
-      if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
-      drag.moved = true;
-      setDragging(true);
-    }
+    const delta = drag.startY - y; // positive = finger moving up
     // An upward drag from peek must show the sheet body immediately; the
     // inline height set below overrides the half-state class height.
-    if (delta > 0 && sheetState === "peek") setSheetState("half");
+    if (delta > 0) setSheetState((s) => (s === "peek" ? "half" : s));
 
-    const dt = e.timeStamp - drag.lastTime;
-    if (dt > 0) drag.velocity = (e.clientY - drag.lastY) / dt;
-    drag.lastY = e.clientY;
-    drag.lastTime = e.timeStamp;
+    const dt = time - drag.lastTime;
+    if (dt > 0) drag.velocity = (y - drag.lastY) / dt;
+    drag.lastY = y;
+    drag.lastTime = time;
 
     const height = Math.min(
       Math.max(drag.startHeight + delta, PEEK_HEIGHT_PX),
-      halfHeightPx(),
+      sheetHalfHeightPx(),
     );
     sheet.style.height = `${height}px`;
-  }
+  }, []);
 
-  function handlePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+  const endDrag = useCallback(() => {
     const drag = dragRef.current;
     const sheet = sheetRef.current;
-    if (drag === null || sheet === null || e.pointerId !== drag.pointerId) {
-      return;
-    }
+    if (drag === null || sheet === null) return;
     dragRef.current = null;
-    if (!drag.moved) return; // a tap — the click event that follows toggles
 
     // Snap: a flick wins; otherwise whichever state is nearer. A drag down
     // from the detail view collapses to peek but keeps the selection, so
     // dragging back up returns to the same shop.
-    suppressClickRef.current = true;
-    const midpoint = (PEEK_HEIGHT_PX + halfHeightPx()) / 2;
+    const midpoint = (PEEK_HEIGHT_PX + sheetHalfHeightPx()) / 2;
     const height = sheet.getBoundingClientRect().height;
     if (drag.velocity > FLICK_VELOCITY_PX_PER_MS) {
       setSheetState("peek");
@@ -228,7 +228,120 @@ export default function MobileBottomSheet({
       setSheetState(height < midpoint ? "peek" : "half");
     }
     setDragging(false);
+  }, []);
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    suppressClickRef.current = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointerRef.current = {
+      pointerId: e.pointerId,
+      startY: e.clientY,
+      dragging: false,
+    };
   }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const probe = pointerRef.current;
+    if (probe === null || e.pointerId !== probe.pointerId) return;
+    if (!probe.dragging) {
+      if (Math.abs(e.clientY - probe.startY) < DRAG_THRESHOLD_PX) return;
+      probe.dragging = true;
+      beginDrag(probe.startY, e.timeStamp);
+    }
+    moveDrag(e.clientY, e.timeStamp);
+  }
+
+  function handlePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    const probe = pointerRef.current;
+    if (probe === null || e.pointerId !== probe.pointerId) return;
+    pointerRef.current = null;
+    if (!probe.dragging) return; // a tap — the click event that follows toggles
+    suppressClickRef.current = true;
+    endDrag();
+  }
+
+  // ── Sheet-body drag (the Apple Maps gesture) ───────────────────────────────
+  // Native touch listeners, because intercepting a drag that starts on
+  // scrollable content requires preventDefault() on touchmove — React attaches
+  // touch handlers passively, and `touch-action: none` (the handle's approach)
+  // would kill list scrolling outright. Arbitration: a downward drag while the
+  // content scroller is at its top collapses the sheet; everything else
+  // (horizontal chip swipes, upward content scrolls, mid-list scrolling) is
+  // left to the browser. preventDefault() on the deciding touchmove also
+  // suppresses the trailing click, so a drag never selects a shop row.
+  useEffect(() => {
+    if (sheetState !== "half") return; // body only mounts in half state
+    const body = bodyRef.current;
+    if (body === null) return;
+
+    type Gesture = {
+      startX: number;
+      startY: number;
+      scroller: Element | null;
+      mode: "undecided" | "scroll" | "drag";
+    };
+    let gesture: Gesture | null = null;
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 1) {
+        gesture = null;
+        return;
+      }
+      const t = e.touches[0];
+      gesture = {
+        startX: t.clientX,
+        startY: t.clientY,
+        scroller: (e.target as Element).closest("[data-sheet-scroll]"),
+        mode: "undecided",
+      };
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (gesture === null || gesture.mode === "scroll") return;
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+
+      if (gesture.mode === "undecided") {
+        const dx = t.clientX - gesture.startX;
+        const dy = t.clientY - gesture.startY;
+        if (
+          Math.abs(dx) < DRAG_THRESHOLD_PX &&
+          Math.abs(dy) < DRAG_THRESHOLD_PX
+        ) {
+          return;
+        }
+        const horizontal = Math.abs(dx) > Math.abs(dy);
+        const scrollsContent =
+          gesture.scroller !== null &&
+          (dy < 0 || gesture.scroller.scrollTop > 0);
+        if (horizontal || scrollsContent) {
+          gesture.mode = "scroll"; // hand the gesture to the browser
+          return;
+        }
+        gesture.mode = "drag";
+        beginDrag(gesture.startY, e.timeStamp);
+      }
+
+      e.preventDefault(); // claim the gesture before the scroller rubber-bands
+      moveDrag(t.clientY, e.timeStamp);
+    }
+
+    function onTouchEnd() {
+      if (gesture !== null && gesture.mode === "drag") endDrag();
+      gesture = null;
+    }
+
+    body.addEventListener("touchstart", onTouchStart, { passive: true });
+    body.addEventListener("touchmove", onTouchMove, { passive: false });
+    body.addEventListener("touchend", onTouchEnd);
+    body.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      body.removeEventListener("touchstart", onTouchStart);
+      body.removeEventListener("touchmove", onTouchMove);
+      body.removeEventListener("touchend", onTouchEnd);
+      body.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [sheetState, beginDrag, moveDrag, endDrag]);
 
   function toggleBrand(brand: string) {
     const next = new Set(activeBrands);
@@ -241,7 +354,7 @@ export default function MobileBottomSheet({
   }
 
   const sheetHeight =
-    sheetState === "peek" ? "h-[86px]" : "h-[42dvh] max-h-[460px]";
+    sheetState === "peek" ? "h-[86px]" : "h-[36dvh] max-h-[460px]";
 
   return (
     <div
@@ -302,7 +415,10 @@ export default function MobileBottomSheet({
 
       {/* Sheet body — only rendered in half state */}
       {sheetState === "half" && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          ref={bodyRef}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
           {showDetail && selectedShop ? (
             <DetailView
               shop={selectedShop}
@@ -430,7 +546,10 @@ function ListView({
       </div>
 
       {/* Scrollable shop list */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div
+        data-sheet-scroll
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
         {!hasLocation || shops.length === 0 ? (
           <p className="px-4 py-[18px] text-sm text-muted">
             {loading
@@ -550,7 +669,10 @@ function DetailView({ shop, allBrands, onBack }: DetailViewProps) {
       </div>
 
       {/* Scrollable brand rows */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 [scrollbar-width:none]">
+      <div
+        data-sheet-scroll
+        className="min-h-0 flex-1 overflow-y-auto px-4 [scrollbar-width:none]"
+      >
         {allBrands.map((brand, idx) => {
           const items = byBrand.get(brand);
           const stocked = items !== undefined;
