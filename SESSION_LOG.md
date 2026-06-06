@@ -723,3 +723,58 @@
   overview has no tall buildings, so the 3D toy effect there is colour/greenery
   only — expected (height data is city-centric).
 - **What I'd do differently:** Nothing — palette-only, fully reversible.
+
+## 2026-06-06 — Search accepts UK towns + geolocation in-flight guard
+
+- **What changed:** `components/LocatorControls.tsx` only. The location box now
+  geocodes towns as well as postcodes: input is routed by a loose UK-postcode
+  regex — postcode-shaped queries hit postcodes.io `/postcodes/:pc`, everything
+  else hits `/places?q=` (response is an array; best match first), each falling
+  back to the other on a miss. Failure copy is no longer postcode-specific.
+  "Use my location" gained a `locating` state (button disabled + spinner +
+  "Locating…" while a fix is pending) and explicit geolocation options
+  (`enableHighAccuracy`, 10s timeout, `maximumAge: 0`).
+- **Why:** Typing a town previously dead-ended with "postcode not found"
+  despite the placeholder promising towns; the location button could fire
+  overlapping geolocation requests with no feedback.
+- **How verified:** postcodes.io `/places` shape confirmed live (Airdrie,
+  Manchester, Glasgow resolve; junk → empty array) before wiring. Full browser
+  pass after merge: town search "Airdrie" resolves with no error hint
+  (`verify-2-town-search.png`). `pnpm tsc --noEmit` clean.
+- **Unsure about / flagged for review:** postcodes.io places coverage is OS
+  Open Names — solid for towns/villages, but street-level queries won't match
+  (by design; this is a town/postcode finder). Nominatim fallback was
+  considered and not needed.
+- **What I'd do differently:** Nothing; single-file change, same provider, no
+  new dependency.
+
+## 2026-06-06 — List-view drawer, no-location empty state, smooth fly-in, loading fix
+
+- **What changed:** `Locator.tsx`, `ShopMap.tsx`, `ResultsPill.tsx`, new
+  `ShopList.tsx`. (1) Fixed the stuck-forever "Searching nearby…" when "use my
+  location" resolved to identical coords twice: a `fetchNonce` joined the fetch
+  effect deps so a same-coords request still completes the load cycle;
+  re-selecting the current radius is now a no-op. (2) New `hasLocation` state:
+  until the user picks a location the map sits on the Airdrie default with shop
+  pins but NO radius ring and NO "you are here" dot, and never auto-pans.
+  (3) On a new centre the map now does a smooth close fly-in (`flyTo`, zoom
+  14.5, 1.2s, pitch/bearing kept); radius-only changes still `fitBounds` to
+  frame the ring. (4) The ResultsPill "List view" stub is now real: a left-edge
+  sliding drawer (`ShopList`) listing matching shops — name, distance, address,
+  per-brand cheapest-price chips; clicking a row selects + pans + opens the
+  popup and keeps the drawer open.
+- **Why:** Four user-reported issues: town search dead-end aside, the locator
+  showed a misleading "you are here" before any location was given, double
+  geolocation froze the UI, results were map-only, and recentring was a
+  zoomed-out frame instead of an arrival.
+- **How verified:** 10/10 automated Playwright checks against the dev server
+  (initial pins-but-no-dot state, town search, geolocate twice without
+  sticking, drawer open/rows, row click → popup; screenshots
+  `verify-1…6*.png` in `.screenshots/`). `pnpm tsc --noEmit` clean.
+- **Unsure about / flagged for review:** The drawer overlaps the top-left
+  controls card when open (z-modal above z-sticky) — intentional, since it has
+  its own close button, but worth a design pass on small screens. The
+  implementing agent hit a session-token limit right at the finish; all code
+  was complete, and the orchestrator ran the verification pass.
+- **What I'd do differently:** Run agent verification before the final
+  report step so a late crash can't orphan an unverified diff.

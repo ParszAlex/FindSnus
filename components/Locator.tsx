@@ -17,6 +17,7 @@ import {
 import BrandFilter from "./BrandFilter";
 import LocatorControls from "./LocatorControls";
 import ResultsPill from "./ResultsPill";
+import ShopList from "./ShopList";
 import SiteFooter from "./SiteFooter";
 
 // MapLibre touches `window` on import, so the map is client-only — never
@@ -44,6 +45,17 @@ export default function Locator() {
   const [activeBrands, setActiveBrands] = useState<Set<string>>(new Set());
   const [brandsKey, setBrandsKey] = useState("");
   const [catalogue, setCatalogue] = useState<string[]>([]);
+  // False until the user picks a location (search or "use my location"). Gates
+  // the radius ring + "you are here" dot + the close fly-in in ShopMap; on first
+  // load the map sits at the Airdrie default with shop pins but no ring/dot.
+  const [hasLocation, setHasLocation] = useState(false);
+  // Whether the left-side list drawer is open.
+  const [listOpen, setListOpen] = useState(false);
+  // Bumped on every location/radius request so the fetch effect re-runs even
+  // when lat/lng/radiusKm are unchanged (e.g. "use my location" resolving to the
+  // exact same fix twice). Without this, an identical-input request would skip
+  // the effect and never clear `loading` — the infinite-loading bug.
+  const [fetchNonce, setFetchNonce] = useState(0);
 
   const radiusKm = radiusMi * MILE_KM;
   const center = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
@@ -131,7 +143,11 @@ export default function Locator() {
     return () => {
       active = false;
     };
-  }, [lat, lng, radiusKm]);
+    // `fetchNonce` is included so an identical-input request (same lat/lng/radius)
+    // still re-runs this effect and resolves the loading state — the backstop for
+    // Issue 3. The handlers only bump the nonce + set loading when something will
+    // actually change, so this never causes a redundant fetch on a true no-op.
+  }, [lat, lng, radiusKm, fetchNonce]);
 
   // A shop is visible while it stocks at least one active brand. Filtered-out
   // shops still render on the map (greyed), so the map never silently empties.
@@ -144,13 +160,29 @@ export default function Locator() {
   );
 
   function handleLocationChange(newLat: number, newLng: number) {
+    // First location pick (from any default) reveals the ring + user dot.
+    setHasLocation(true);
     setSelectedShopId(null);
+
+    // If the coords are unchanged (same GPS fix, or a fast second click that
+    // resolves identically), React would skip the lat/lng state change and the
+    // fetch effect's [lat, lng, radiusKm] deps wouldn't fire — leaving `loading`
+    // stuck on forever. We still want feedback + a re-fetch, so bump the nonce
+    // (which the fetch effect also depends on) and enter loading. When the coords
+    // DO change, set them too; loading is entered once, the effect runs once.
+    const changed = newLat !== lat || newLng !== lng;
     setLoading(true);
-    setLat(newLat);
-    setLng(newLng);
+    setFetchNonce((n) => n + 1);
+    if (changed) {
+      setLat(newLat);
+      setLng(newLng);
+    }
   }
 
   function handleRadiusChange(miles: number) {
+    // No-op guard: re-selecting the current radius shouldn't enter loading at all
+    // (nothing to fetch), which also can't get stuck since the effect won't run.
+    if (miles === radiusMi) return;
     setSelectedShopId(null);
     setLoading(true);
     setRadiusMi(miles);
@@ -164,11 +196,25 @@ export default function Locator() {
           allShops={shops}
           center={center}
           radiusKm={radiusKm}
+          hasLocation={hasLocation}
           selectedShopId={selectedShopId}
           onSelectShop={setSelectedShopId}
           // The popup's brand list, already resolved against the active filter.
           // ShopMap forwards this straight to ShopPopup; markers don't read it.
           allBrands={popupBrands}
+        />
+
+        {/* Left-side collapsible list of the shops matching the active filter.
+            Selecting a row reuses the selection flow (pan + popup) and keeps the
+            drawer open. */}
+        <ShopList
+          shops={visibleShops}
+          selectedShopId={selectedShopId}
+          onSelectShop={setSelectedShopId}
+          open={listOpen}
+          onClose={() => setListOpen(false)}
+          radiusMi={radiusMi}
+          loading={loading}
         />
 
         {/* Top rail: the two cards sit at opposite corners on desktop and stack
@@ -196,6 +242,8 @@ export default function Locator() {
           radiusMi={radiusMi}
           loading={loading}
           error={error}
+          listOpen={listOpen}
+          onToggleList={() => setListOpen((o) => !o)}
         />
       </div>
 

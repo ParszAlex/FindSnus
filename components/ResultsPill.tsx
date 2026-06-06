@@ -9,6 +9,10 @@ type Props = {
   radiusMi: number;
   loading: boolean;
   error: boolean;
+  /** Whether the left-side list drawer is open (drives the button's state). */
+  listOpen: boolean;
+  /** Toggle the list drawer open/closed. */
+  onToggleList: () => void;
 };
 
 export default function ResultsPill({
@@ -16,6 +20,8 @@ export default function ResultsPill({
   radiusMi,
   loading,
   error,
+  listOpen,
+  onToggleList,
 }: Props) {
   const radiusLabel = `${radiusMi} ${radiusMi === 1 ? "mile" : "miles"}`;
 
@@ -36,9 +42,12 @@ export default function ResultsPill({
 
       <button
         type="button"
-        // TODO: build the list view; for now this is a visible-but-inert stub.
-        onClick={() => console.log("List view: not implemented yet")}
-        className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.14] px-[13px] py-1.5 text-xs font-semibold text-bg transition-colors hover:bg-white/[0.24]"
+        onClick={onToggleList}
+        aria-pressed={listOpen}
+        aria-expanded={listOpen}
+        className={`inline-flex items-center gap-1.5 rounded-full px-[13px] py-1.5 text-xs font-semibold text-bg transition-colors ${
+          listOpen ? "bg-white/[0.30]" : "bg-white/[0.14] hover:bg-white/[0.24]"
+        }`}
       >
         <ListIcon />
         List view

@@ -40,6 +40,9 @@ type Props = {
   allShops: ShopWithListings[];
   center: [number, number];
   radiusKm: number;
+  /** False until the user picks a location: hide the ring + user dot, and don't
+   *  auto-pan. Once true, the ring + dot appear and the map flies in. */
+  hasLocation: boolean;
   selectedShopId: string | null;
   onSelectShop: (id: string | null) => void;
   allBrands: string[];
@@ -95,6 +98,7 @@ export default function ShopMap({
   allShops,
   center,
   radiusKm,
+  hasLocation,
   selectedShopId,
   onSelectShop,
   allBrands,
@@ -111,6 +115,11 @@ export default function ShopMap({
   // Markers we own, keyed by shop id, so we can update/replace icons in place.
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
+
+  // The center the recenter effect last animated to. Lets us tell a center change
+  // (new location → close flyTo) from a radius-only change (same center →
+  // fitBounds to frame the new ring). Null until the first location is set.
+  const prevCenterRef = useRef<[number, number] | null>(null);
 
   // Latest selection handler, read by marker click closures without re-binding.
   // Synced in an effect (never mutated during render).
@@ -147,11 +156,15 @@ export default function ShopMap({
       // Soft fill + dashed outline, painted just under the building layer so
       // pins and buildings still sit on top.
       const before = instance.getLayer("building-flat") ? "building-flat" : undefined;
+      // Both ring layers start hidden: on first load there's no location yet, so
+      // no ring shows (Issue 4). The recenter effect flips visibility once a
+      // location exists.
       instance.addLayer(
         {
           id: "radius-fill",
           type: "fill",
           source: CIRCLE_SOURCE,
+          layout: { visibility: "none" },
           paint: { "fill-color": BRAND_HEX, "fill-opacity": 0.07 },
         },
         before,
@@ -161,6 +174,7 @@ export default function ShopMap({
           id: "radius-outline",
           type: "line",
           source: CIRCLE_SOURCE,
+          layout: { visibility: "none" },
           paint: {
             "line-color": BRAND_HEX,
             "line-width": 1.5,
@@ -188,10 +202,38 @@ export default function ShopMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- "You are here" marker + recenter on center/radius change -------------
+  // --- "You are here" marker + radius ring + recenter -----------------------
+  // All gated on `hasLocation`: on first load there's no location, so the user
+  // dot and ring stay hidden and the map sits at the Airdrie default — shop
+  // markers (handled in the next effect) still render. Once a location is set,
+  // the dot + ring appear and the map animates: a NEW center flies in close and
+  // smooth (Issue 5); a radius-only change (same center) fitBounds-frames the
+  // new ring.
   useEffect(() => {
     if (!map || !ready) return;
 
+    // Keep the circle geometry current even while hidden, so it's correct the
+    // instant we reveal it.
+    const src = map.getSource(CIRCLE_SOURCE) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    src?.setData(circleGeoJson(lat, lng, radiusKm));
+
+    if (!hasLocation) {
+      // No location yet: ensure ring + dot are absent, and do NOT auto-pan.
+      map.setLayoutProperty("radius-fill", "visibility", "none");
+      map.setLayoutProperty("radius-outline", "visibility", "none");
+      userMarkerRef.current?.remove();
+      userMarkerRef.current = null;
+      prevCenterRef.current = null;
+      return;
+    }
+
+    // Reveal the ring.
+    map.setLayoutProperty("radius-fill", "visibility", "visible");
+    map.setLayoutProperty("radius-outline", "visibility", "visible");
+
+    // "You are here" dot.
     if (!userMarkerRef.current) {
       userMarkerRef.current = new maplibregl.Marker({
         element: userMarkerEl(),
@@ -203,24 +245,38 @@ export default function ShopMap({
       userMarkerRef.current.setLngLat([lng, lat]);
     }
 
-    // Update the radius circle geometry.
-    const src = map.getSource(CIRCLE_SOURCE) as
-      | maplibregl.GeoJSONSource
-      | undefined;
-    src?.setData(circleGeoJson(lat, lng, radiusKm));
+    const prev = prevCenterRef.current;
+    const centerChanged = !prev || prev[0] !== lat || prev[1] !== lng;
+    prevCenterRef.current = [lat, lng];
 
-    // Re-frame so the circle is always in view, with a little breathing room.
-    // ~2.4× the circle diameter as a square around the user (matches the old
-    // Leaflet behaviour). easeTo keeps our pitch/bearing.
-    const latR = radiusKm / 110.574;
-    const lngR = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
-    const pad = 1.2; // half-extent multiplier
-    const bounds = new maplibregl.LngLatBounds(
-      [lng - lngR * pad, lat - latR * pad],
-      [lng + lngR * pad, lat + latR * pad],
-    );
-    map.fitBounds(bounds, { padding: 40, pitch: 45, bearing: -12, duration: 600 });
-  }, [map, lat, lng, radiusKm, ready]);
+    if (centerChanged) {
+      // New location: pan in close and smooth, keeping the plastic tilt.
+      map.flyTo({
+        center: [lng, lat],
+        zoom: 14.5,
+        pitch: 45,
+        bearing: -12,
+        duration: 1200,
+        essential: true,
+      });
+    } else {
+      // Same center, radius changed: frame the new ring with breathing room.
+      // ~2.4× the circle diameter as a square around the user.
+      const latR = radiusKm / 110.574;
+      const lngR = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+      const pad = 1.2; // half-extent multiplier
+      const bounds = new maplibregl.LngLatBounds(
+        [lng - lngR * pad, lat - latR * pad],
+        [lng + lngR * pad, lat + latR * pad],
+      );
+      map.fitBounds(bounds, {
+        padding: 40,
+        pitch: 45,
+        bearing: -12,
+        duration: 600,
+      });
+    }
+  }, [map, lat, lng, radiusKm, hasLocation, ready]);
 
   // --- Shop markers (one per shop, state-coloured) --------------------------
   useEffect(() => {
