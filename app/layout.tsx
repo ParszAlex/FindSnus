@@ -9,6 +9,7 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://find-snus-imbg.vercel.app"),
   title: "findsnus — find UK shops that stock your nicotine pouches",
   description:
     "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",

@@ -26,6 +26,13 @@ no-location empty state + smooth fly-in + stuck-loading fix.
 - Unsure about / flagged for review: The 200px top margin is a fixed estimate based on the described controls height (~170–180px + 18px inset). If `LocatorControls` ever grows taller on mobile (more rows, larger font) this value will need revisiting. A CSS custom property approach (measuring actual height) would be more robust long-term but adds JS complexity that wasn't warranted here.
 - What I'd do differently: Nothing significant — the fix is minimal and targeted. If controls height were dynamic I'd measure with a ResizeObserver and expose a CSS variable instead.
 
+## 2026-06-06 — Glasgow Tesco seed migration
+
+- What changed: Created `supabase/migrations/20260606120000_seed_glasgow_tesco.sql`. Adds 10 Tesco Express stores across Glasgow city centre (Hope St, Argyle St, Byres Rd, Victoria Rd, High St, Cowcaddens Rd, Maryhill Rd, Paisley Rd West, Duke St, Dumbarton Rd) with coordinates from postcodes.io. Listings cover VELO (all 10 shops), ZYN (6 shops), Killa (4 shops), Pablo (3 shops) at realistic UK Tesco prices and strength variants. Uses a single `DO $$` block with declared UUID variables so shop IDs are referenced cleanly without hardcoded literals.
+- Why: First real Glasgow data cluster to make the map useful during development and demo.
+- Unsure about / flagged for review: G1 1DU is a terminated postcode (postcodes.io returned 404); archived coordinates from the API's `terminated` field were used — these are close but may not sit exactly on the store. Worth verifying manually before promoting to `verified=true`. The 200px mobile drawer margin is still an estimate and would need revisiting if LocatorControls grows.
+- What I'd do differently: Nothing significant. Could have used a CTE-based approach instead of `DO $$` variables — both are readable, the DO block mirrors what we'd expect if this grows further.
+
 ## 2026-06-06 — OpenGraph and Twitter card metadata
 - What changed: Expanded `metadata` export in `app/layout.tsx` to include `openGraph` (type: website) and `twitter` (card: summary_large_image) fields, both reusing the existing title and description. Created `app/opengraph-image.tsx` using Next.js built-in `ImageResponse` (no new dependency) — 1200×630, dark `#0f1117` background, white bold wordmark "findsnus" at 96px, muted tagline below. `pnpm tsc --noEmit` passed clean.
 - Why: Social share previews were blank; platforms show the OG image when a link is pasted.
