@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 type Props = {
   onLocationChange: (lat: number, lng: number) => void;
@@ -94,9 +95,11 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
   }
 
   function openSearch() {
-    setSearchFocused(true);
-    setHint(null);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    flushSync(() => {
+      setSearchFocused(true);
+      setHint(null);
+    });
+    inputRef.current?.focus();
   }
 
   function cancelSearch() {
@@ -133,7 +136,8 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Enter postcode or town"
-                className="flex-1 bg-transparent text-[14px] text-ink placeholder:text-muted focus:outline-none"
+                enterKeyHint="go"
+                className="flex-1 bg-transparent text-[16px] text-ink placeholder:text-muted focus:outline-none"
               />
             </form>
             <button

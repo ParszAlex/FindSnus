@@ -10,7 +10,7 @@ const publicSans = Public_Sans({
 
 export const viewport: Viewport = {
   viewportFit: "cover",
-  themeColor: "#000000",
+  themeColor: "#f6efd8",
 };
 
 export const metadata: Metadata = {

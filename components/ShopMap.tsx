@@ -367,7 +367,7 @@ export default function ShopMap({
 
   return (
     <div className="relative size-full">
-      <div ref={containerRef} className="size-full" />
+      <div ref={containerRef} className="size-full" style={{ background: "#f6efd8" }} />
 
       <div className="hidden sm:block">{popup}</div>
 
