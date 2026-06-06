@@ -5,13 +5,16 @@
 -- G1 1DU returned a terminated-postcode result; its archived coordinates are used.
 --
 -- Brand distribution rationale:
---   VELO   — most widely stocked (all 10 shops)
+--   Velo   — most widely stocked (all 10 shops)
 --   ZYN    — common (6 of 10 shops)
 --   Killa  — less common (4 of 10 shops)
 --   Pablo  — least common (3 of 10 shops)
 --
 -- Fully schema-qualified where it matters; no `set search_path` at file level
 -- (same convention as 20260603230038_create_initial_schema.sql).
+
+-- ZYN wasn't in the catalogue yet; add it idempotently before the DO block.
+insert into public.brands (name) values ('ZYN') on conflict (name) do nothing;
 
 do $$
 declare
@@ -38,7 +41,7 @@ begin
   -- ------------------------------------------------------------------ --
   -- 1. Resolve brand IDs                                                --
   -- ------------------------------------------------------------------ --
-  select id into v_velo  from public.brands where name = 'VELO';
+  select id into v_velo  from public.brands where name = 'Velo';
   select id into v_zyn   from public.brands where name = 'ZYN';
   select id into v_killa from public.brands where name = 'Killa';
   select id into v_pablo from public.brands where name = 'Pablo';
@@ -131,7 +134,7 @@ begin
   -- ------------------------------------------------------------------ --
   -- 3. Insert listings                                                  --
   --                                                                     --
-  -- VELO  (10 mg / 14 mg)  £3.99–£5.49  — all 10 shops                 --
+  -- Velo  (10 mg / 14 mg)  £3.99–£5.49  — all 10 shops                 --
   -- ZYN   (6 mg / 11 mg)   £4.49–£5.99  — 6 shops                      --
   -- Killa (16 mg / 24 mg)  £4.99–£6.49  — 4 shops                      --
   -- Pablo (20 mg / 50 mg)  £5.49–£6.99  — 3 shops                      --
