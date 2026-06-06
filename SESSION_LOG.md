@@ -624,3 +624,77 @@
 - **What I'd do differently:** Nothing structural. If the popup ever needs to
   distinguish "deselected" from "carried-but-filtered-out", that'd be a separate
   presentational concern, not a data change.
+
+## 2026-06-06 — MapLibre cartoon basemap (Leaflet → MapLibre GL swap)
+
+- **What changed:** Replaced the Leaflet map with MapLibre GL to get a
+  cartoonish / plasticky "polished toy map" basemap (user-approved stack swap).
+  - Added `lib/mapStyle.ts`: a hand-built MapLibre `StyleSpecification` on
+    Stadia's OpenMapTiles **vector** source, heavily restyled — soft warm-paper
+    land, glossy pastel water, mint parks, chunky white road ribbons with soft
+    casings, candy-orange motorways, dashed candy boundaries, and **3D
+    fill-extrusion buildings** (`render_height` × 1.4) at zoom ≥ 15 for the
+    plastic-block look. Includes a free no-key CartoDB Voyager raster fallback
+    (`buildStyle()` picks it when the key is missing) so the map never renders
+    blank.
+  - Rewrote `components/ShopMap.tsx` to drive MapLibre directly via a ref +
+    effects (no React wrapper — the popup was already a manual projected
+    overlay, so a wrapper bought nothing). Reimplemented every existing
+    behaviour: one custom HTML marker per shop with the same blue/white/grey
+    state encoding; the "you are here" dot + `.user-ping`; the dashed radius
+    indicator (a 64-pt GeoJSON polygon, since MapLibre has no Circle); recenter
+    on centre/radius change via `fitBounds` (keeping pitch/bearing); the
+    bottom-right zoom card; and the React-overlay popup anchored from
+    `map.project()` and re-pinned on every `move`/`zoom`. Map stored in state
+    (not a ref) so render-time projection is render-safe under the React 19
+    lint rules.
+  - Imported `maplibre-gl/dist/maplibre-gl.css`. Renamed the `.leaflet-container`
+    CSS rule to `.maplibregl-map` in `app/globals.css` and refreshed the
+    Leaflet-referencing comments in `globals.css`, `Locator.tsx`, `ShopPopup.tsx`.
+  - Updated CLAUDE.md stack line to note the MapLibre swap (2026-06-06).
+  - Visible attribution now credits Stadia Maps + OpenMapTiles + OpenStreetMap.
+- **Why:** "Genuinely cartoonish / plasticky basemap that still reads as a clean
+  UK store locator." The flat Stadia raster `alidade_smooth` look was replaced
+  with a vector style we can fully art-direct, including real 3D buildings.
+- **Dependencies:** Added `maplibre-gl@5.24.0` (no peer deps; no React-19
+  conflict). Removed `leaflet@1.9.4`, `react-leaflet@5.0.0`, and
+  `@types/leaflet@1.9.21` — confirmed via grep that nothing in the repo still
+  imports them. No new tile provider; reused the existing
+  `NEXT_PUBLIC_STADIA_API_KEY` (never hardcoded).
+- **Stadia endpoints used (verified against docs.stadiamaps.com, June 2026):**
+  - vector source `https://tiles.stadiamaps.com/data/openmaptiles.json?api_key=…`
+  - glyphs `https://tiles.stadiamaps.com/fonts/{fontstack}/{range}.pbf`
+    (font stacks: "Stadia Regular/Semibold/Bold")
+  - sprite `https://tiles.stadiamaps.com/styles/alidade-smooth/sprite`
+- **Verification:** `pnpm install`, `pnpm tsc --noEmit`, and `pnpm build` all
+  clean; `pnpm lint` clean for all app/component/lib files (the only remaining
+  lint errors live in untracked `.agents`/`.claude` skill scripts, pre-existing
+  and unrelated). Browser-tested via playwright-skill on the gated home: age
+  gate passes, MapLibre vector tiles load (1 TileJSON + ~44 .pbf + glyph
+  requests, no blank box), 4 shop markers + the user dot render, selecting a
+  marker opens the popup pinned above it and it stays pinned on pan/zoom, the
+  radius circle + zoom controls work, and the 3D buildings render obliquely over
+  central London. Filter contract intact: with only "Velo" active the popup
+  shows ONLY Velo; with no filter it shows all brands incl. Pablo/Killa as "Not
+  stocked here". Zero console errors after the colour fix below. Screenshots in
+  `.screenshots/` (gitignored): `map-cartoon-overview.png`,
+  `map-cartoon-popup.png`, `map-cartoon-filtered.png`, `map-cartoon-3d.png`.
+- **Unsure about / flagged for review:**
+  - MapLibre's GL paint-property colour validator rejects `oklch()` (it only
+    accepts legacy CSS colours), so the radius-circle layers use a hardcoded
+    `#004590` constant = the sRGB equivalent of our `oklch(0.4 0.14 255)` brand
+    blue. The HTML markers still use the oklch literal (real DOM/CSS accepts it).
+    If the brand blue token ever changes, that hex must be re-derived. A possible
+    follow-up: centralise the brand blue as a single hex token.
+  - 3D building heights depend on OpenMapTiles `render_height`; rural areas
+    (e.g. the Airdrie seed location) have little/no height data, so the toy-3D
+    effect is most visible in cities. Acceptable, but worth knowing.
+  - The map keeps a fixed `pitch: 45 / bearing: -12`. Looks great for the
+    cartoon/3D feel; if a flatter top-down read is ever preferred for the
+    locator, that's a one-line change.
+  - `.agents`/`.claude` skill scripts trip `no-require-imports` /
+    `react-hooks` lint errors. They're external tooling (untracked), not app
+    code — left as-is rather than widening eslint ignore in this task.
+- **What I'd do differently:** Nothing structural. The custom style is verbose
+  but that's inherent to art-directing a vector basemap; it's well-commented and
+  isolated in `lib/mapStyle.ts`.

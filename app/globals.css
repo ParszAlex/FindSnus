@@ -67,9 +67,10 @@
   /*
     The locator map fills its (fixed, full-viewport) parent. position:relative
     makes it the offset parent for the React-rendered popup overlay, which is
-    placed in pixel coordinates from map.latLngToContainerPoint().
+    placed in pixel coordinates from map.project(). Soft surface behind the GL
+    canvas so any momentary uncovered edge never flashes harsh white.
   */
-  .leaflet-container {
+  .maplibregl-map {
     height: 100%;
     width: 100%;
     position: relative;
@@ -99,7 +100,7 @@
 }
 
 /*
-  "You are here" marker pulse. The dot itself is a Leaflet divIcon (see
+  "You are here" marker pulse. The dot itself is a MapLibre HTML marker (see
   ShopMap); this ring is its animated child, expanding and fading on a loop.
 */
 .user-ping {

@@ -1,7 +1,7 @@
 "use client";
 
 // The rich shop popup. Rendered as an absolutely-positioned overlay inside the
-// Leaflet container (NOT a Leaflet <Popup>), so React owns its content and
+// MapLibre container (NOT a MapLibre Popup), so React owns its content and
 // styling completely. <ShopMap> computes the pixel anchor from the marker's
 // screen position and passes it in via `x` / `bottom`; this component is purely
 // presentational. Brand rows are driven off `allBrands`, which <Locator> has

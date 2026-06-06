@@ -10,7 +10,7 @@ This is a portfolio project. Code quality and clean git history matter as much a
 - **Language:** TypeScript (strict)
 - **Styling:** Tailwind CSS v4
 - **Database:** Supabase (Postgres + PostGIS for geo queries)
-- **Map:** Leaflet + react-leaflet (free, no API key)
+- **Map:** MapLibre GL — user-approved swap from Leaflet on 2026-06-06 (cartoon vector basemap on Stadia Maps tiles)
 - **Deploy:** Vercel
 - **Package manager:** pnpm
 

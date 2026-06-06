@@ -19,8 +19,8 @@ import LocatorControls from "./LocatorControls";
 import ResultsPill from "./ResultsPill";
 import SiteFooter from "./SiteFooter";
 
-// Leaflet touches `window` on import, so the map is client-only — never imported
-// on the server. The placeholder keeps the surface calm while it loads.
+// MapLibre touches `window` on import, so the map is client-only — never
+// imported on the server. The placeholder keeps the surface calm while it loads.
 const ShopMap = dynamic(() => import("./ShopMap"), {
   ssr: false,
   loading: () => <div className="size-full bg-surface" />,

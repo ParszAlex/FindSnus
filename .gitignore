@@ -42,3 +42,6 @@ next-env.d.ts
 
 # ignore node_modules ANYWHERE, not just root
 node_modules/
+
+# local verification screenshots (not source)
+/.screenshots/
