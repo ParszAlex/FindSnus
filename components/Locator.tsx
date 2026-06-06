@@ -56,6 +56,10 @@ export default function Locator() {
   // exact same fix twice). Without this, an identical-input request would skip
   // the effect and never clear `loading` — the infinite-loading bug.
   const [fetchNonce, setFetchNonce] = useState(0);
+  // Bumped on every explicit location request (search or GPS) so ShopMap always
+  // flies back to the user's position even when the coordinates are identical to
+  // the last fix (i.e. the user has panned away and wants to re-centre).
+  const [recenterKey, setRecenterKey] = useState(0);
 
   const radiusKm = radiusMi * MILE_KM;
   const center = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
@@ -173,6 +177,7 @@ export default function Locator() {
     const changed = newLat !== lat || newLng !== lng;
     setLoading(true);
     setFetchNonce((n) => n + 1);
+    setRecenterKey((k) => k + 1);
     if (changed) {
       setLat(newLat);
       setLng(newLng);
@@ -202,6 +207,7 @@ export default function Locator() {
           // The popup's brand list, already resolved against the active filter.
           // ShopMap forwards this straight to ShopPopup; markers don't read it.
           allBrands={popupBrands}
+          recenterKey={recenterKey}
         />
 
         {/* Left-side collapsible list of the shops matching the active filter.

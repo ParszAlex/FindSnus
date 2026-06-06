@@ -46,6 +46,11 @@ type Props = {
   selectedShopId: string | null;
   onSelectShop: (id: string | null) => void;
   allBrands: string[];
+  /** Bumped by Locator on every explicit location request (search or GPS).
+   *  ShopMap uses this to fly back to the user even when coordinates are
+   *  identical to the last fix — i.e. the user has panned away and taps
+   *  "Use my location" again. */
+  recenterKey: number;
 };
 
 // A teardrop pin whose fills encode state. Returned as an HTML string for a
@@ -102,6 +107,7 @@ export default function ShopMap({
   selectedShopId,
   onSelectShop,
   allBrands,
+  recenterKey,
 }: Props) {
   const [lat, lng] = center;
 
@@ -120,6 +126,9 @@ export default function ShopMap({
   // (new location → close flyTo) from a radius-only change (same center →
   // fitBounds to frame the new ring). Null until the first location is set.
   const prevCenterRef = useRef<[number, number] | null>(null);
+  // Tracks the last recenterKey we acted on. If the key changes we always flyTo,
+  // even when coordinates are identical (user panned away and wants to re-centre).
+  const prevRecenterKeyRef = useRef(0);
 
   // Latest selection handler, read by marker click closures without re-binding.
   // Synced in an effect (never mutated during render).
@@ -245,6 +254,25 @@ export default function ShopMap({
       userMarkerRef.current.setLngLat([lng, lat]);
     }
 
+    // If the recenterKey changed the user explicitly requested a location (search
+    // or GPS), so always fly in — even when coordinates are identical to the last
+    // fix (i.e. the user has panned away and wants to re-centre).
+    const keyChanged = recenterKey !== prevRecenterKeyRef.current;
+    prevRecenterKeyRef.current = recenterKey;
+
+    if (keyChanged) {
+      prevCenterRef.current = [lat, lng];
+      map.flyTo({
+        center: [lng, lat],
+        zoom: 14.5,
+        pitch: 45,
+        bearing: -12,
+        duration: 1200,
+        essential: true,
+      });
+      return;
+    }
+
     const prev = prevCenterRef.current;
     const centerChanged = !prev || prev[0] !== lat || prev[1] !== lng;
     prevCenterRef.current = [lat, lng];
@@ -276,7 +304,7 @@ export default function ShopMap({
         duration: 600,
       });
     }
-  }, [map, lat, lng, radiusKm, hasLocation, ready]);
+  }, [map, lat, lng, radiusKm, hasLocation, ready, recenterKey]);
 
   // --- Shop markers (one per shop, state-coloured) --------------------------
   useEffect(() => {
