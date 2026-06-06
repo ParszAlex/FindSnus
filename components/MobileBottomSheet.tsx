@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Listing, ShopWithListings } from "@/lib/shops";
 import { RADIUS_MILES } from "./LocatorControls";
 
@@ -16,6 +16,37 @@ type Props = {
   onRadiusChange: (miles: number) => void;
   loading: boolean;
   hasLocation: boolean;
+};
+
+// Sheet geometry. Half is 42dvh (capped) rather than a fixed px so the map
+// centre — where the user's location dot lands after a fly-to — stays visible
+// above the sheet: on an 844px viewport the sheet top sits at ~490px, ~67px
+// below centre (422px). Keep in sync with the h-[42dvh] max-h-[460px] classes.
+const PEEK_HEIGHT_PX = 86;
+const HALF_HEIGHT_DVH = 42;
+const HALF_HEIGHT_MAX_PX = 460;
+// Pointer movement below this is a tap (toggles the sheet); above it, a drag.
+const DRAG_THRESHOLD_PX = 5;
+// Release velocity (px/ms) above which the sheet snaps in the flick
+// direction regardless of how far it has travelled.
+const FLICK_VELOCITY_PX_PER_MS = 0.4;
+
+// Pixel equivalent of the half-state CSS height.
+function halfHeightPx(): number {
+  return Math.min(
+    (window.innerHeight * HALF_HEIGHT_DVH) / 100,
+    HALF_HEIGHT_MAX_PX,
+  );
+}
+
+type DragState = {
+  pointerId: number;
+  startY: number;
+  startHeight: number;
+  lastY: number;
+  lastTime: number;
+  velocity: number; // px/ms — positive when the finger is moving down
+  moved: boolean; // true once movement passes DRAG_THRESHOLD_PX
 };
 
 // Mirrors the formatDistance used in ShopList and ShopPopup.
@@ -70,11 +101,30 @@ export default function MobileBottomSheet({
   hasLocation,
 }: Props) {
   const [sheetState, setSheetState] = useState<"peek" | "half">("peek");
+  const [dragging, setDragging] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
+  // A click event fires after every pointerup; this flags the one that
+  // follows a real drag so it doesn't also toggle the sheet.
+  const suppressClickRef = useRef(false);
+
+  // When a drag ends, hand height control back to the CSS classes so the
+  // re-enabled transition animates from the release point to the snap target.
+  useLayoutEffect(() => {
+    if (!dragging && sheetRef.current !== null) {
+      sheetRef.current.style.height = "";
+    }
+  }, [dragging]);
 
   // When a shop is selected externally (e.g. map pin tap), snap to half.
-  useEffect(() => {
+  // Adjusted during render (React's documented alternative to an effect for
+  // "reset state when an input changes") — mirrors the brandsKey pattern in
+  // Locator.
+  const [prevSelectedId, setPrevSelectedId] = useState(selectedShopId);
+  if (selectedShopId !== prevSelectedId) {
+    setPrevSelectedId(selectedShopId);
     if (selectedShopId !== null) setSheetState("half");
-  }, [selectedShopId]);
+  }
 
   // When a fetch completes (loading: true → false) and the user has a location,
   // snap to half so the shop list becomes visible without a manual drag.
@@ -102,6 +152,84 @@ export default function MobileBottomSheet({
     setSheetState((s) => (s === "peek" ? "half" : "peek"));
   }
 
+  function handleClick() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    handleHandle();
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const sheet = sheetRef.current;
+    if (sheet === null) return;
+    suppressClickRef.current = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startY: e.clientY,
+      startHeight: sheet.getBoundingClientRect().height,
+      lastY: e.clientY,
+      lastTime: e.timeStamp,
+      velocity: 0,
+      moved: false,
+    };
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    const sheet = sheetRef.current;
+    if (drag === null || sheet === null || e.pointerId !== drag.pointerId) {
+      return;
+    }
+
+    const delta = drag.startY - e.clientY; // positive = finger moving up
+    if (!drag.moved) {
+      if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+      setDragging(true);
+    }
+    // An upward drag from peek must show the sheet body immediately; the
+    // inline height set below overrides the half-state class height.
+    if (delta > 0 && sheetState === "peek") setSheetState("half");
+
+    const dt = e.timeStamp - drag.lastTime;
+    if (dt > 0) drag.velocity = (e.clientY - drag.lastY) / dt;
+    drag.lastY = e.clientY;
+    drag.lastTime = e.timeStamp;
+
+    const height = Math.min(
+      Math.max(drag.startHeight + delta, PEEK_HEIGHT_PX),
+      halfHeightPx(),
+    );
+    sheet.style.height = `${height}px`;
+  }
+
+  function handlePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    const sheet = sheetRef.current;
+    if (drag === null || sheet === null || e.pointerId !== drag.pointerId) {
+      return;
+    }
+    dragRef.current = null;
+    if (!drag.moved) return; // a tap — the click event that follows toggles
+
+    // Snap: a flick wins; otherwise whichever state is nearer. A drag down
+    // from the detail view collapses to peek but keeps the selection, so
+    // dragging back up returns to the same shop.
+    suppressClickRef.current = true;
+    const midpoint = (PEEK_HEIGHT_PX + halfHeightPx()) / 2;
+    const height = sheet.getBoundingClientRect().height;
+    if (drag.velocity > FLICK_VELOCITY_PX_PER_MS) {
+      setSheetState("peek");
+    } else if (drag.velocity < -FLICK_VELOCITY_PX_PER_MS) {
+      setSheetState("half");
+    } else {
+      setSheetState(height < midpoint ? "peek" : "half");
+    }
+    setDragging(false);
+  }
+
   function toggleBrand(brand: string) {
     const next = new Set(activeBrands);
     if (next.has(brand)) {
@@ -112,11 +240,17 @@ export default function MobileBottomSheet({
     onBrandsChange(next);
   }
 
-  const sheetHeight = sheetState === "peek" ? "h-[86px]" : "h-[460px]";
+  const sheetHeight =
+    sheetState === "peek" ? "h-[86px]" : "h-[42dvh] max-h-[460px]";
 
   return (
     <div
-      className={`absolute bottom-0 left-0 right-0 z-[1001] flex flex-col overflow-hidden rounded-t-[20px] bg-bg shadow-[0_-3px_20px_rgba(0,0,0,0.12)] transition-[height] duration-[380ms] ease-[cubic-bezier(.16,1,.3,1)] ${sheetHeight}`}
+      ref={sheetRef}
+      className={`absolute bottom-0 left-0 right-0 z-[1001] flex flex-col overflow-hidden rounded-t-[20px] bg-bg shadow-[0_-3px_20px_rgba(0,0,0,0.12)] ${
+        dragging
+          ? ""
+          : "transition-[height] duration-[380ms] ease-[cubic-bezier(.16,1,.3,1)]"
+      } ${sheetHeight}`}
     >
       {/* Drag handle area */}
       <div
@@ -129,11 +263,15 @@ export default function MobileBottomSheet({
               ? "Show shop list"
               : "Minimise"
         }
-        onClick={handleHandle}
+        onClick={handleClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") handleHandle();
         }}
-        className={`flex shrink-0 cursor-pointer select-none flex-col items-center ${
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        className={`flex shrink-0 cursor-pointer touch-none select-none flex-col items-center ${
           sheetState === "peek" ? "pb-[6px] pt-[12px]" : "pt-[10px] pb-0"
         }`}
       >

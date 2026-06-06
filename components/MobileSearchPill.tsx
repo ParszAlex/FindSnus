@@ -121,6 +121,10 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
           <>
             <form
               onSubmit={handleSearch}
+              // iOS only shows a submit action key (Search/Go) when the form
+              // has an `action`; without it the return key stays "Done"/"return".
+              // Never navigates — handleSearch calls preventDefault() first.
+              action="#"
               className="flex h-11 flex-1 items-center gap-2.5 rounded-[14px] border border-primary bg-white/[0.98] px-3.5 shadow-[0_0_0_3px_oklch(0.40_0.14_255_/_0.18),0_2px_10px_rgba(0,0,0,0.12)]"
             >
               {searching || loading ? (
@@ -130,14 +134,14 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
               )}
               <input
                 ref={inputRef}
-                type="text"
+                type="search"
                 inputMode="text"
                 autoComplete="postal-code"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Enter postcode or town"
-                enterKeyHint="go"
-                className="flex-1 bg-transparent text-[16px] text-ink placeholder:text-muted focus:outline-none"
+                enterKeyHint="search"
+                className="flex-1 appearance-none bg-transparent text-[16px] text-ink placeholder:text-muted focus:outline-none [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
               />
             </form>
             <button

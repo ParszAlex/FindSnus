@@ -196,7 +196,18 @@ export default function Locator() {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    // Mobile: `fixed inset-0` pins the shell to the layout viewport's edges, so
+    // in standalone (home-screen) mode — where viewport-fit=cover +
+    // black-translucent make that viewport the whole physical screen — the map
+    // canvas paints under the Dynamic Island. `h-dvh` is the fragile version of
+    // the same idea: WebKit resolves dvh (and env()) against stale geometry on
+    // standalone cold start until the viewport is exercised, whereas fixed
+    // positioning tracks the real viewport without consulting those values. In a
+    // regular Safari tab the island strip belongs to Safari's chrome
+    // (safe-area-inset-top is 0 in portrait) — no web content can paint there,
+    // so it falls back to the colour-matched html background instead. Desktop
+    // (sm+) keeps the in-flow column so SiteFooter sits below the map.
+    <div className="fixed inset-0 flex flex-col overflow-hidden sm:static sm:h-dvh">
       <div className="relative flex-1 overflow-hidden">
         <ShopMap
           shops={visibleShops}

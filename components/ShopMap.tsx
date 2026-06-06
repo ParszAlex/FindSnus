@@ -2,8 +2,9 @@
 
 // The full-viewport MapLibre GL map for the locator. MapLibre reads `window` on
 // import, so this module is client-only — <Locator> pulls it in via
-// next/dynamic({ ssr: false }). The map IS the page: it fills its fixed parent,
-// and all chrome (search, filters, pill, footer) floats over it from <Locator>.
+// next/dynamic({ ssr: false }). The map IS the page: it fills its full-bleed
+// parent (fixed inset-0 on mobile, in-flow on desktop), and all chrome (search,
+// filters, pill, footer) floats over it from <Locator>.
 //
 // Basemap is a hand-built cartoon/plastic style on Stadia's OpenMapTiles vector
 // tiles (see lib/mapStyle.ts), with 3D fill-extrusion buildings at high zoom.
