@@ -698,3 +698,28 @@
 - **What I'd do differently:** Nothing structural. The custom style is verbose
   but that's inherent to art-directing a vector basemap; it's well-commented and
   isolated in `lib/mapStyle.ts`.
+
+## 2026-06-06 — Louder cartoon palette + warm height-graded buildings
+
+- **What changed:** Tuned `lib/mapStyle.ts` only (no logic touched). The first
+  cartoon style read too subtle, so the palette is now louder: bright pool-blue
+  water, punchy mint greens/grass, candy-orange motorways, fuller flat-fill
+  opacities. Buildings are now **height-graded** ("toy model"): cream for short
+  buildings → peach → terracotta for towers (`fill-extrusion-color` interpolated
+  on `render_height` with four stops), and the extrusion is taller (× 1.4 → 2.3)
+  and fully opaque (0.9 → 1).
+- **Why:** User compared a subtle (A) vs a loud all-pink (B) render and chose
+  "louder, but retune the hue" (pink fought the blue brand pins). Warm
+  height-graded buildings keep B's punch and 3D drama while complementing the
+  warm land and leaving the blue pins as the loudest thing on the map.
+- **How verified:** Built two standalone MapLibre harnesses (Node 24 type-strip
+  import of `cartoonStyle`, Chromium via the vendored playwright-skill) and
+  screenshotted A/B/final at an identical oblique London camera + a top-down
+  view of the Airdrie seed area. `pnpm tsc --noEmit` clean. Renders in
+  `.screenshots/`: `compare-A.png`, `compare-B.png`, `compare-C.png`,
+  `compare-C-town.png`.
+- **Unsure about / flagged for review:** Building hue is a one-line palette swap
+  (`buildingLow/Mid/Tall/XTall`) if terracotta isn't the wanted vibe. The town
+  overview has no tall buildings, so the 3D toy effect there is colour/greenery
+  only — expected (height data is city-centric).
+- **What I'd do differently:** Nothing — palette-only, fully reversible.

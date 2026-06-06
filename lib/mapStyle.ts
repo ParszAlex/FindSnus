@@ -25,26 +25,32 @@ const FONT_BOLD = ["Stadia Bold"];
 // thing on the map. All sRGB hex (MapLibre paints its own GL canvas and can't
 // read our CSS custom properties).
 const C = {
-  water: "#aedcf0", // glossy pool blue
-  waterDeep: "#92cdec",
-  land: "#f4f1e8", // warm paper
-  green: "#c7e6b8", // park / wood — soft mint
-  greenDark: "#b3dca0",
-  grass: "#d3ecc6",
-  sand: "#f0e6c8",
-  residential: "#efeadd",
+  water: "#74d2f7", // bright pool blue
+  waterDeep: "#3fbef0",
+  land: "#f6efd8", // warm cream paper
+  green: "#9be86f", // park / wood — punchy mint
+  greenDark: "#7ad94f",
+  grass: "#aef07e",
+  sand: "#f7df9a",
+  residential: "#f0e7c8",
   road: "#ffffff",
-  roadCasing: "#e6dfce",
-  roadMinor: "#fbf9f3",
-  motorway: "#ffd9a8", // candy-orange trunk roads
-  motorwayCasing: "#f1b878",
-  building: "#e9e0cc",
-  buildingTop: "#f3ecda",
-  buildingShade: "#ddd2b8",
+  roadCasing: "#ecc8a0",
+  roadMinor: "#fffaf0",
+  motorway: "#ffbf40", // candy-orange trunk roads
+  motorwayCasing: "#f59415",
+  building: "#f0dcc0", // warm cream (flat + short buildings)
+  buildingTop: "#f6e8d2",
+  buildingShade: "#e0c098",
+  // Height-graded "toy model" buildings: cream → peach → terracotta as they
+  // get taller. Warm hues complement the land and keep the blue pins loudest.
+  buildingLow: "#f3e3c8",
+  buildingMid: "#f2c79a",
+  buildingTall: "#e89a78",
+  buildingXTall: "#df8060",
   label: "#5a5346",
   labelHalo: "#fffdf7",
-  waterLabel: "#5b8fb0",
-  boundary: "#d8b8c8",
+  waterLabel: "#2f86b8",
+  boundary: "#e89ac0",
 };
 
 const STADIA_SOURCE = (key: string) =>
@@ -83,7 +89,7 @@ export function cartoonStyle(apiKey: string): StyleSpecification {
         source: "openmaptiles",
         "source-layer": "landuse",
         filter: ["==", ["get", "class"], "residential"],
-        paint: { "fill-color": C.residential, "fill-opacity": 0.7 },
+        paint: { "fill-color": C.residential, "fill-opacity": 0.9 },
       },
       {
         id: "landcover-wood",
@@ -91,7 +97,7 @@ export function cartoonStyle(apiKey: string): StyleSpecification {
         source: "openmaptiles",
         "source-layer": "landcover",
         filter: ["in", ["get", "class"], ["literal", ["wood", "forest"]]],
-        paint: { "fill-color": C.green, "fill-opacity": 0.85 },
+        paint: { "fill-color": C.green, "fill-opacity": 0.95 },
       },
       {
         id: "landcover-grass",
@@ -99,14 +105,14 @@ export function cartoonStyle(apiKey: string): StyleSpecification {
         source: "openmaptiles",
         "source-layer": "landcover",
         filter: ["in", ["get", "class"], ["literal", ["grass", "meadow"]]],
-        paint: { "fill-color": C.grass, "fill-opacity": 0.85 },
+        paint: { "fill-color": C.grass, "fill-opacity": 0.95 },
       },
       {
         id: "landuse-park",
         type: "fill",
         source: "openmaptiles",
         "source-layer": "park",
-        paint: { "fill-color": C.greenDark, "fill-opacity": 0.6 },
+        paint: { "fill-color": C.greenDark, "fill-opacity": 0.85 },
       },
       {
         id: "landcover-sand",
@@ -287,9 +293,13 @@ export function cartoonStyle(apiKey: string): StyleSpecification {
             ["linear"],
             ["get", "render_height"],
             0,
-            C.building,
-            30,
-            C.buildingTop,
+            C.buildingLow,
+            20,
+            C.buildingMid,
+            60,
+            C.buildingTall,
+            120,
+            C.buildingXTall,
           ],
           "fill-extrusion-height": [
             "interpolate",
@@ -298,10 +308,10 @@ export function cartoonStyle(apiKey: string): StyleSpecification {
             15,
             0,
             15.5,
-            ["*", ["coalesce", ["get", "render_height"], 5], 1.4],
+            ["*", ["coalesce", ["get", "render_height"], 5], 2.3],
           ],
           "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-          "fill-extrusion-opacity": 0.9,
+          "fill-extrusion-opacity": 1,
         },
       },
 
