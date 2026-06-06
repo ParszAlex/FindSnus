@@ -369,7 +369,7 @@ export default function ShopMap({
     <div className="relative size-full">
       <div ref={containerRef} className="size-full" />
 
-      {popup}
+      <div className="hidden sm:block">{popup}</div>
 
       <ZoomControls
         onZoomIn={() => map?.zoomIn()}
@@ -422,7 +422,7 @@ function ZoomControls({
   onZoomOut: () => void;
 }) {
   return (
-    <div className="absolute right-[18px] bottom-[40px] z-[1000] flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-zoom">
+    <div className="absolute right-[18px] bottom-[106px] z-[1000] flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-zoom sm:bottom-[40px]">
       <button
         type="button"
         aria-label="Zoom in"

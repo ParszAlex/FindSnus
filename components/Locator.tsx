@@ -16,6 +16,8 @@ import {
 } from "@/lib/shops";
 import BrandFilter from "./BrandFilter";
 import LocatorControls from "./LocatorControls";
+import MobileBottomSheet from "./MobileBottomSheet";
+import MobileSearchPill from "./MobileSearchPill";
 import ResultsPill from "./ResultsPill";
 import ShopList from "./ShopList";
 import SiteFooter from "./SiteFooter";
@@ -210,23 +212,42 @@ export default function Locator() {
           recenterKey={recenterKey}
         />
 
-        {/* Left-side collapsible list of the shops matching the active filter.
-            Selecting a row reuses the selection flow (pan + popup) and keeps the
-            drawer open. */}
-        <ShopList
-          shops={visibleShops}
-          selectedShopId={selectedShopId}
-          onSelectShop={setSelectedShopId}
-          open={listOpen}
-          onClose={() => setListOpen(false)}
-          radiusMi={radiusMi}
-          loading={loading}
-        />
+        {/* Mobile chrome (< sm): glass search pill + Apple Maps bottom sheet */}
+        <div className="sm:hidden">
+          <MobileSearchPill
+            onLocationChange={handleLocationChange}
+            loading={loading}
+          />
+          <MobileBottomSheet
+            shops={visibleShops}
+            allShops={shops}
+            allBrands={allBrands}
+            activeBrands={activeBrands}
+            onBrandsChange={setActiveBrands}
+            selectedShopId={selectedShopId}
+            onSelectShop={setSelectedShopId}
+            radiusMi={radiusMi}
+            onRadiusChange={handleRadiusChange}
+            loading={loading}
+            hasLocation={hasLocation}
+          />
+        </div>
 
-        {/* Top rail: the two cards sit at opposite corners on desktop and stack
-            on narrow screens. pointer-events-none lets map drags pass through
-            the empty gap between them; each card re-enables its own. */}
-        <div className="pointer-events-none absolute inset-x-[18px] top-[18px] z-[var(--z-sticky)] flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-0">
+        {/* Desktop chrome (sm+): left drawer */}
+        <div className="hidden sm:block">
+          <ShopList
+            shops={visibleShops}
+            selectedShopId={selectedShopId}
+            onSelectShop={setSelectedShopId}
+            open={listOpen}
+            onClose={() => setListOpen(false)}
+            radiusMi={radiusMi}
+            loading={loading}
+          />
+        </div>
+
+        {/* Desktop chrome (sm+): top rail — search card + brand filter */}
+        <div className="pointer-events-none absolute inset-x-[18px] top-[18px] z-[var(--z-sticky)] hidden sm:flex sm:flex-row sm:items-start sm:justify-between">
           <LocatorControls
             radiusMi={radiusMi}
             onRadiusChange={handleRadiusChange}
@@ -243,17 +264,23 @@ export default function Locator() {
           )}
         </div>
 
-        <ResultsPill
-          count={visibleShops.length}
-          radiusMi={radiusMi}
-          loading={loading}
-          error={error}
-          listOpen={listOpen}
-          onToggleList={() => setListOpen((o) => !o)}
-        />
+        {/* Desktop chrome (sm+): results pill */}
+        <div className="hidden sm:block">
+          <ResultsPill
+            count={visibleShops.length}
+            radiusMi={radiusMi}
+            loading={loading}
+            error={error}
+            listOpen={listOpen}
+            onToggleList={() => setListOpen((o) => !o)}
+          />
+        </div>
       </div>
 
-      <SiteFooter />
+      {/* Footer is desktop-only; the mobile sheet grounds the page instead */}
+      <div className="hidden sm:block">
+        <SiteFooter />
+      </div>
     </div>
   );
 }
