@@ -10,6 +10,7 @@
   --color-bg: oklch(1 0 0);
   --color-surface: oklch(0.985 0 0);
   --color-border: oklch(0.91 0 0);
+  --color-border-strong: oklch(0.24 0 0 / 0.3);
   --color-ink: oklch(0.24 0 0);
   --color-muted: oklch(0.46 0 0);
   --color-primary: oklch(0.40 0.14 255);
@@ -21,6 +22,16 @@
   /* semantic z-index scale (never arbitrary 999) */
   --z-sticky: 10;
   --z-modal: 100;
+
+  /*
+    Elevation for the locator's floating chrome over the full-bleed map.
+    Soft, low-spread shadows keep the "clinical wayfinding" mood — one set of
+    named tokens so the control card, popup, pill and zoom stay consistent.
+  */
+  --shadow-float: 0 10px 28px -10px oklch(0 0 0 / 0.22), 0 2px 6px oklch(0 0 0 / 0.08);
+  --shadow-popup: 0 12px 30px -8px oklch(0 0 0 / 0.28), 0 2px 8px oklch(0 0 0 / 0.1);
+  --shadow-zoom: 0 6px 18px -8px oklch(0 0 0 / 0.2);
+  --shadow-pill: 0 8px 22px -8px oklch(0 0 0 / 0.4);
 }
 
 @layer base {
@@ -52,6 +63,19 @@
     color: var(--color-muted);
     opacity: 1;
   }
+
+  /*
+    The locator map fills its (fixed, full-viewport) parent. position:relative
+    makes it the offset parent for the React-rendered popup overlay, which is
+    placed in pixel coordinates from map.latLngToContainerPoint().
+  */
+  .leaflet-container {
+    height: 100%;
+    width: 100%;
+    position: relative;
+    background: var(--color-surface);
+    font-family: var(--font-sans);
+  }
 }
 
 /*
@@ -72,6 +96,30 @@
 
 .animate-rise {
   animation: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+  "You are here" marker pulse. The dot itself is a Leaflet divIcon (see
+  ShopMap); this ring is its animated child, expanding and fading on a loop.
+*/
+.user-ping {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid oklch(0.4 0.14 255 / 0.5);
+  animation: ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  80%,
+  100% {
+    transform: scale(3.4);
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -7,16 +7,16 @@
  */
 export default function SiteFooter() {
   return (
-    <footer className="mt-auto border-t border-border bg-surface">
-      <div className="mx-auto w-full max-w-2xl px-6 py-8">
-        <p className="text-sm font-medium text-ink">For adults 18 and over.</p>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-          findsnus lists shops that sell tobacco-free nicotine pouches for legal
-          sale in the UK. It is an information tool, not a shop: we do not sell
-          anything and make no health claims. Traditional snus is banned for UK
-          sale and is not listed here.
+    <footer className="border-t border-border bg-surface">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-6 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+        <p className="text-xs leading-relaxed text-muted">
+          <span className="font-semibold text-ink">For adults 18 and over.</span>{" "}
+          findsnus lists shops selling tobacco-free nicotine pouches for legal
+          sale in the UK — an information tool, not a shop. We sell nothing and
+          make no health claims. Traditional snus is banned for UK sale and is
+          not listed here.
         </p>
-        <p className="mt-5 text-xs text-muted">
+        <p className="shrink-0 text-xs text-muted">
           © {new Date().getFullYear()} findsnus
         </p>
       </div>

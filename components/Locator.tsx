@@ -1,165 +1,166 @@
 "use client";
 
-// The locator list. Consumes lib/shops.getNearbyShopsWithListings (the fetch
-// proven on /rpc-test) and renders nearest-first shops with each brand's
-// strengths + prices. No map, no cheapest-highlight yet — that's a later step.
+// The locator shell: a full-bleed map with floating chrome over it, and the
+// compliance footer beneath. It owns all locator state (centre, radius, the
+// fetched shops, the active brand filter, the selected shop) and feeds it to the
+// presentational pieces. Data still comes from the one proven fetch in
+// lib/shops — this layer only decides *what* to ask for and *how* to show it.
 // Rendered on the home page only after the 18+ age gate is confirmed.
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getNearbyShopsWithListings,
-  type Listing,
   type ShopWithListings,
 } from "@/lib/shops";
+import BrandFilter from "./BrandFilter";
+import LocatorControls from "./LocatorControls";
+import ResultsPill from "./ResultsPill";
+import SiteFooter from "./SiteFooter";
 
 // Leaflet touches `window` on import, so the map is client-only — never imported
-// on the server. A placeholder keeps the layout from jumping while it loads.
+// on the server. The placeholder keeps the surface calm while it loads.
 const ShopMap = dynamic(() => import("./ShopMap"), {
   ssr: false,
-  loading: () => (
-    <div className="h-80 w-full rounded-lg border border-border bg-surface" />
-  ),
+  loading: () => <div className="size-full bg-surface" />,
 });
 
-// Hardcoded Airdrie centre + radius, matching the proven /rpc-test call. A real
-// postcode / "use my location" input replaces these in a later step.
-const LAT = 55.8657;
-const LNG = -3.9803;
-const RADIUS_KM = 10;
+// Default centre: Airdrie, matching the existing seed data.
+const DEFAULT_LAT = 55.8657;
+const DEFAULT_LNG = -3.9803;
+const DEFAULT_RADIUS_MI = 3;
 
-// 317.88 -> "320 m", 2245.39 -> "2.2 km".
-function formatDistance(metres: number): string {
-  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
-  return `${(metres / 1000).toFixed(1)} km`;
-}
-
-function formatPrice(price: number): string {
-  return `£${price.toFixed(2)}`;
-}
+const MILE_KM = 1.609344; // exact; radius is shown in miles but fetched in km.
 
 export default function Locator() {
-  const [shops, setShops] = useState<ShopWithListings[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
+  const [lat, setLat] = useState(DEFAULT_LAT);
+  const [lng, setLng] = useState(DEFAULT_LNG);
+  const [radiusMi, setRadiusMi] = useState(DEFAULT_RADIUS_MI);
+  const [shops, setShops] = useState<ShopWithListings[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
+  const [activeBrands, setActiveBrands] = useState<Set<string>>(new Set());
+  const [brandsKey, setBrandsKey] = useState("");
 
+  const radiusKm = radiusMi * MILE_KM;
+  const center = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
+
+  // Brand universe = every brand across the returned shops, alphabetical. The
+  // filter and the popups both read this so a brand a shop doesn't carry can be
+  // shown as an explicit "Not stocked here".
+  const allBrands = useMemo(
+    () =>
+      [
+        ...new Set(
+          shops.flatMap((s) =>
+            s.listings
+              .map((l) => l.brand)
+              .filter((b): b is string => b !== null),
+          ),
+        ),
+      ].sort(),
+    [shops],
+  );
+
+  // Reset the brand filter to "all active" whenever the brand universe changes
+  // (a fetch returned a different set). Adjusting state during render is React's
+  // documented alternative to an effect for "reset state when an input changes".
+  const nextBrandsKey = allBrands.join("|");
+  if (nextBrandsKey !== brandsKey) {
+    setBrandsKey(nextBrandsKey);
+    setActiveBrands(new Set(allBrands));
+  }
+
+  // One fetch per (centre, radius). State is set only in the promise callbacks,
+  // never synchronously in the effect body; the immediate "loading" feedback is
+  // set by the handlers that change those inputs (and by the initial state).
   useEffect(() => {
-    getNearbyShopsWithListings(LAT, LNG, RADIUS_KM)
+    let active = true;
+    getNearbyShopsWithListings(lat, lng, radiusKm)
       .then((result) => {
+        if (!active) return;
         setShops(result);
-        setError(null);
+        setError(false);
       })
-      .catch((e) => setError(e));
-  }, []);
+      .catch(() => {
+        if (!active) return;
+        setShops([]);
+        setError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [lat, lng, radiusKm]);
 
-  return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Nearby shops</h1>
-
-      {error ? (
-        <p className="mt-6 text-muted">
-          Couldn’t load shops right now. Please try again.
-        </p>
-      ) : shops === null ? (
-        <p className="mt-6 text-muted">Loading shops…</p>
-      ) : shops.length === 0 ? (
-        <p className="mt-6 text-muted">No shops found within {RADIUS_KM} km.</p>
-      ) : (
-        <>
-          <p className="mt-1 text-sm text-muted">
-            {shops.length} {shops.length === 1 ? "shop" : "shops"} within{" "}
-            {RADIUS_KM} km, nearest first.
-          </p>
-          <div className="mt-6">
-            <ShopMap shops={shops} center={[LAT, LNG]} zoom={12} />
-          </div>
-          <ShopList shops={shops} />
-        </>
-      )}
-    </main>
-  );
-}
-
-function ShopList({ shops }: { shops: ShopWithListings[] }) {
-  // Brand universe = every brand seen across the returned shops, alphabetical.
-  // Driving each shop's render off this (not off its own listings) is what lets
-  // us say "Not stocked here" for a brand a shop simply doesn't carry.
-  const allBrands = [
-    ...new Set(
-      shops.flatMap((s) =>
-        s.listings
-          .map((l) => l.brand)
-          .filter((b): b is string => b !== null),
+  // A shop is visible while it stocks at least one active brand. Filtered-out
+  // shops still render on the map (greyed), so the map never silently empties.
+  const visibleShops = useMemo(
+    () =>
+      shops.filter((s) =>
+        s.listings.some((l) => l.brand && activeBrands.has(l.brand)),
       ),
-    ),
-  ].sort();
-
-  return (
-    <ul className="mt-6 space-y-4">
-      {shops.map((shop) => (
-        <ShopCard key={shop.id} shop={shop} allBrands={allBrands} />
-      ))}
-    </ul>
+    [shops, activeBrands],
   );
-}
 
-function ShopCard({
-  shop,
-  allBrands,
-}: {
-  shop: ShopWithListings;
-  allBrands: string[];
-}) {
-  // Group this shop's listings by brand, each brand's strengths ascending.
-  const byBrand = new Map<string, Listing[]>();
-  for (const l of shop.listings) {
-    if (l.brand === null) continue;
-    const group = byBrand.get(l.brand) ?? [];
-    group.push(l);
-    byBrand.set(l.brand, group);
+  function handleLocationChange(newLat: number, newLng: number) {
+    setSelectedShopId(null);
+    setLoading(true);
+    setLat(newLat);
+    setLng(newLng);
   }
-  for (const group of byBrand.values()) {
-    group.sort((a, b) => a.strength_mg - b.strength_mg);
+
+  function handleRadiusChange(miles: number) {
+    setSelectedShopId(null);
+    setLoading(true);
+    setRadiusMi(miles);
   }
 
   return (
-    <li className="rounded-lg border border-border bg-surface p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-medium">{shop.name}</h2>
-        <span className="shrink-0 text-sm text-muted">
-          {formatDistance(shop.distance_m)}
-        </span>
-      </div>
-      <p className="text-sm text-muted">{shop.address}</p>
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <div className="relative flex-1 overflow-hidden">
+        <ShopMap
+          shops={visibleShops}
+          allShops={shops}
+          center={center}
+          radiusKm={radiusKm}
+          selectedShopId={selectedShopId}
+          onSelectShop={setSelectedShopId}
+          allBrands={allBrands}
+        />
 
-      <dl className="mt-3 divide-y divide-border">
-        {allBrands.map((brand) => {
-          const items = byBrand.get(brand);
-          return (
-            <div key={brand} className="py-2 first:pt-0 last:pb-0">
-              <dt className="text-sm font-medium">{brand}</dt>
-              <dd className="mt-1 text-sm">
-                {items ? (
-                  <ul className="space-y-0.5">
-                    {items.map((l) => (
-                      <li
-                        key={l.strength_mg}
-                        className="flex justify-between gap-4"
-                      >
-                        <span>{l.strength_mg} mg</span>
-                        <span className="tabular-nums">
-                          {formatPrice(l.price)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <span className="text-muted italic">Not stocked here</span>
-                )}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
-    </li>
+        {/* Top rail: the two cards sit at opposite corners on desktop and stack
+            on narrow screens. pointer-events-none lets map drags pass through
+            the empty gap between them; each card re-enables its own. */}
+        <div className="pointer-events-none absolute inset-x-[18px] top-[18px] z-[var(--z-sticky)] flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-0">
+          <LocatorControls
+            radiusMi={radiusMi}
+            onRadiusChange={handleRadiusChange}
+            onLocationChange={handleLocationChange}
+            loading={loading}
+          />
+
+          {allBrands.length > 0 && (
+            <BrandFilter
+              brands={allBrands}
+              active={activeBrands}
+              onChange={setActiveBrands}
+            />
+          )}
+        </div>
+
+        <ResultsPill
+          count={visibleShops.length}
+          radiusMi={radiusMi}
+          loading={loading}
+          error={error}
+        />
+      </div>
+
+      <SiteFooter />
+    </div>
   );
 }
