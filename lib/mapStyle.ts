@@ -36,8 +36,6 @@ const LIGHT = {
   road: "#ffffff",
   roadCasing: "#ecc8a0",
   roadMinor: "#fffaf0",
-  motorway: "#ffbf40", // candy-orange trunk roads
-  motorwayCasing: "#f59415",
   building: "#f0dcc0", // warm cream (flat + short buildings)
   buildingShade: "#e0c098",
   // Height-graded "toy model" buildings: cream → peach → terracotta as they
@@ -53,10 +51,10 @@ const LIGHT = {
 };
 
 // Night variant: the same toy city after dark. Deep desaturated slate land,
-// ink-blue water, pine greens, roads as faintly lit ribbons and a muted amber
-// glow on motorways. Buildings get LIGHTER as they get taller (lit windows),
-// inverting the light theme's warm ramp. Calm and legible — deliberately not
-// the neon "vape shop at night" look the brand bans.
+// ink-blue water, pine greens and roads as faintly lit ribbons. Buildings get
+// LIGHTER as they get taller (lit windows), inverting the light theme's warm
+// ramp. Calm and legible — deliberately not the neon "vape shop at night"
+// look the brand bans.
 const DARK: typeof LIGHT = {
   water: "#27567c",
   waterDeep: "#1d4364",
@@ -69,8 +67,6 @@ const DARK: typeof LIGHT = {
   road: "#46526b", // lit-street ribbons, lighter than the land
   roadCasing: "#161c28",
   roadMinor: "#3a4458",
-  motorway: "#c4913f", // muted amber — warm sodium-lamp arterials
-  motorwayCasing: "#7d5a22",
   building: "#303849",
   buildingShade: "#1a202c",
   buildingLow: "#323a4d",
@@ -191,11 +187,15 @@ export function cartoonStyle(apiKey: string, dark = false): StyleSpecification {
       },
 
       // --- Roads: chunky white ribbons with soft casings -----------------
+      // Motorways and trunks render the same as other major roads — one calm
+      // ribbon colour, no loud highway tint. Major roads stay hidden below
+      // zoom 7 so the whole-UK overview is clean land/water/cities.
       {
         id: "road-casing",
         type: "line",
         source: "openmaptiles",
         "source-layer": "transportation",
+        minzoom: 7,
         filter: [
           "in",
           ["get", "class"],
@@ -203,15 +203,7 @@ export function cartoonStyle(apiKey: string, dark = false): StyleSpecification {
         ],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": [
-            "match",
-            ["get", "class"],
-            "motorway",
-            C.motorwayCasing,
-            "trunk",
-            C.motorwayCasing,
-            C.roadCasing,
-          ],
+          "line-color": C.roadCasing,
           "line-width": [
             "interpolate",
             ["exponential", 1.5],
@@ -255,6 +247,7 @@ export function cartoonStyle(apiKey: string, dark = false): StyleSpecification {
         type: "line",
         source: "openmaptiles",
         "source-layer": "transportation",
+        minzoom: 7,
         filter: [
           "in",
           ["get", "class"],
@@ -262,15 +255,7 @@ export function cartoonStyle(apiKey: string, dark = false): StyleSpecification {
         ],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": [
-            "match",
-            ["get", "class"],
-            "motorway",
-            C.motorway,
-            "trunk",
-            C.motorway,
-            C.road,
-          ],
+          "line-color": C.road,
           "line-width": [
             "interpolate",
             ["exponential", 1.5],
