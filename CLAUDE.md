@@ -50,3 +50,5 @@ At the end of every task, append an entry to `SESSION_LOG.md`:
 ```
 
 This is for human review. Be honest about what you were unsure of — that is the most useful part.
+
+Keep `SESSION_LOG.md` short — recent entries only. When it grows past ~200 lines, move the oldest entries into `SESSION_LOG_ARCHIVE.md` (append-only, full history). **Never read the archive start to finish**; consult it only when a specific past decision is in question.
