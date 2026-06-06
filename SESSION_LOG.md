@@ -588,6 +588,28 @@
 - **What I'd do differently:** Nothing — the fallback makes this a safe,
   reversible one-line provider swap.
 
+## 2026-06-06 — Seed Pablo + Killa brands (catalogue only)
+
+- **What changed:** New migration
+  `supabase/migrations/20260606012234_seed_pablo_killa_brands.sql`, inserting two
+  tobacco-free nicotine pouch brands — `Pablo` and `Killa` — into
+  `public.brands` via `on conflict (name) do nothing`. No shops, no listings.
+  Mirrors the Velo seed pattern exactly: schema-qualified `public.brands`,
+  idempotent, no `set search_path`, explanatory header. Applied to remote with
+  `supabase db push` (dry-run first confirmed it was the only pending migration).
+- **Why:** Grow the brand catalogue ahead of the listings that will reference
+  these brands. Brands-first keeps each migration single-purpose and lets the
+  listing data land in its own later task.
+- **Unsure about / flagged for review:** These two brands are intentionally
+  invisible in the UI until at least one listing references them. `allBrands` in
+  `components/Locator.tsx` (L52–64) derives the brand universe purely from the
+  listings of returned shops, so a brand with zero listings never appears in the
+  filter or popups. That is expected, not a bug. Verified via the Data API:
+  `select name from public.brands order by name` returns Killa + Pablo (with
+  Nordic Spirit, Velo), and a join to `listings` returns 0 rows for both.
+- **What I'd do differently:** Nothing. Idempotent and re-runnable; the migration
+  is now in remote history, so a repeat `db push` is a no-op.
+
 ## 2026-06-06 — Popup brand availability respects the filter (+ full brand universe)
 
 - **What changed:** The shop popup's brand list now (a) includes brands with
