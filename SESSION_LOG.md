@@ -7,6 +7,13 @@ when it grows past ~200 lines, move the oldest entries into
 start to finish — consult it only when a specific past decision is in
 question.
 
+## 2026-06-06 — Re-centre fix (split effects) + UK map bounds
+
+- What changed: `ShopMap.tsx` — split the combined ring/marker/camera effect into two focused effects: Effect A handles ring geometry, visibility, and user dot (no camera); Effect B fires only on `recenterKey` changes and calls `flyTo` using coord refs so lat/lng are NOT in its dep array. This guarantees the flyTo always fires on explicit location requests (GPS, search, repeated taps after panning) without being confused by radius changes or other dep noise. Also added `maxBounds: [[-10.5, 49.5], [2.2, 61.5]]` and `minZoom: 5` to the map init so users can't pan outside UK waters.
+- Why: "Use my location" was not re-centring the map after panning away. Root cause: the previous `prevRecenterKeyRef` mechanism lived in a single effect with many deps; if any other dep changed between taps, the ref was updated without firing flyTo, so the next tap saw a matching ref and skipped the animation. Separating camera into its own effect with a minimal dep array (`[map, ready, hasLocation, recenterKey]`) removes the interference.
+- Unsure about / flagged for review: `maxBounds` clips at 2.2°E which cuts off a small strip east of the UK coast — unlikely to matter for the use case but worth checking if Channel Tunnel / ferry port searches ever come up.
+- What I'd do differently: Should have used the split-effect pattern from the start rather than the `prevRecenterKeyRef` approach.
+
 ## 2026-06-06 — Mobile footer + re-centre fix
 
 - What changed: `SiteFooter.tsx` — mobile shows a single compact line ("18+ only · Tobacco-free pouches · Not a shop · © findsnus") via `sm:hidden`; full compliance text is `hidden sm:block`; standalone copyright hidden on mobile to avoid duplication; `py-2 sm:py-3` trims vertical padding. `ShopMap.tsx` + `Locator.tsx` — added `recenterKey` state (bumped on every explicit location request) and `prevRecenterKeyRef` in ShopMap; any location action now always triggers `flyTo` before falling through to the existing `centerChanged`/`fitBounds` logic, so tapping "Use my location" re-centres the map even when GPS returns the same fix.

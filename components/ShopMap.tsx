@@ -122,13 +122,13 @@ export default function ShopMap({
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
 
-  // The center the recenter effect last animated to. Lets us tell a center change
-  // (new location → close flyTo) from a radius-only change (same center →
-  // fitBounds to frame the new ring). Null until the first location is set.
-  const prevCenterRef = useRef<[number, number] | null>(null);
-  // Tracks the last recenterKey we acted on. If the key changes we always flyTo,
-  // even when coordinates are identical (user panned away and wants to re-centre).
-  const prevRecenterKeyRef = useRef(0);
+  // Tracks the previous radius so we can detect radius-only changes and fitBounds
+  // the new ring without affecting camera on location requests.
+  const prevRadiusRef = useRef(radiusKm);
+  // Always-current lat/lng for the flyTo effect, which intentionally omits
+  // lat/lng from its deps so it only fires on explicit recenter requests.
+  const latRef = useRef(lat);
+  const lngRef = useRef(lng);
 
   // Latest selection handler, read by marker click closures without re-binding.
   // Synced in an effect (never mutated during render).
@@ -136,6 +136,13 @@ export default function ShopMap({
   useEffect(() => {
     onSelectRef.current = onSelectShop;
   }, [onSelectShop]);
+
+  // Keep coord refs fresh after every render — consumed by the flyTo effect
+  // which intentionally omits lat/lng from its own dep array.
+  useEffect(() => {
+    latRef.current = lat;
+    lngRef.current = lng;
+  });
 
   // Forces a re-render of the popup overlay so it stays pinned during map
   // animation (mirrors the old useMapEvents move/zoom tick).
@@ -151,9 +158,12 @@ export default function ShopMap({
       center: [lng, lat], // MapLibre is [lng, lat]
       zoom: 13,
       attributionControl: false,
-      // A gentle tilt so the 3D buildings read as plastic blocks, not a flat map.
       pitch: 45,
       bearing: -12,
+      // Restrict panning to the UK + nearby waters so users can't scroll to
+      // unrelated regions and trigger unnecessary tile fetches.
+      maxBounds: [[-10.5, 49.5], [2.2, 61.5]] as [[number, number], [number, number]],
+      minZoom: 5,
     });
     setMap(instance);
 
@@ -211,38 +221,30 @@ export default function ShopMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- "You are here" marker + radius ring + recenter -----------------------
-  // All gated on `hasLocation`: on first load there's no location, so the user
-  // dot and ring stay hidden and the map sits at the Airdrie default — shop
-  // markers (handled in the next effect) still render. Once a location is set,
-  // the dot + ring appear and the map animates: a NEW center flies in close and
-  // smooth (Issue 5); a radius-only change (same center) fitBounds-frames the
-  // new ring.
+  // --- "You are here" marker + radius ring ----------------------------------
+  // Updates the ring geometry, visibility, and user dot. No camera movement —
+  // that lives in the dedicated flyTo effect below so the two concerns stay
+  // independent and can't interfere with each other's dep arrays.
   useEffect(() => {
     if (!map || !ready) return;
 
-    // Keep the circle geometry current even while hidden, so it's correct the
-    // instant we reveal it.
     const src = map.getSource(CIRCLE_SOURCE) as
       | maplibregl.GeoJSONSource
       | undefined;
     src?.setData(circleGeoJson(lat, lng, radiusKm));
 
     if (!hasLocation) {
-      // No location yet: ensure ring + dot are absent, and do NOT auto-pan.
       map.setLayoutProperty("radius-fill", "visibility", "none");
       map.setLayoutProperty("radius-outline", "visibility", "none");
       userMarkerRef.current?.remove();
       userMarkerRef.current = null;
-      prevCenterRef.current = null;
+      prevRadiusRef.current = radiusKm;
       return;
     }
 
-    // Reveal the ring.
     map.setLayoutProperty("radius-fill", "visibility", "visible");
     map.setLayoutProperty("radius-outline", "visibility", "visible");
 
-    // "You are here" dot.
     if (!userMarkerRef.current) {
       userMarkerRef.current = new maplibregl.Marker({
         element: userMarkerEl(),
@@ -254,57 +256,40 @@ export default function ShopMap({
       userMarkerRef.current.setLngLat([lng, lat]);
     }
 
-    // If the recenterKey changed the user explicitly requested a location (search
-    // or GPS), so always fly in — even when coordinates are identical to the last
-    // fix (i.e. the user has panned away and wants to re-centre).
-    const keyChanged = recenterKey !== prevRecenterKeyRef.current;
-    prevRecenterKeyRef.current = recenterKey;
-
-    if (keyChanged) {
-      prevCenterRef.current = [lat, lng];
-      map.flyTo({
-        center: [lng, lat],
-        zoom: 14.5,
-        pitch: 45,
-        bearing: -12,
-        duration: 1200,
-        essential: true,
-      });
-      return;
-    }
-
-    const prev = prevCenterRef.current;
-    const centerChanged = !prev || prev[0] !== lat || prev[1] !== lng;
-    prevCenterRef.current = [lat, lng];
-
-    if (centerChanged) {
-      // New location: pan in close and smooth, keeping the plastic tilt.
-      map.flyTo({
-        center: [lng, lat],
-        zoom: 14.5,
-        pitch: 45,
-        bearing: -12,
-        duration: 1200,
-        essential: true,
-      });
-    } else {
-      // Same center, radius changed: frame the new ring with breathing room.
-      // ~2.4× the circle diameter as a square around the user.
+    // Radius-only change (no new location request): frame the updated ring.
+    // We detect this by comparing to the last radius we saw, not by watching
+    // recenterKey — that stays zero on radius changes, which is how we tell the
+    // two apart without overlap.
+    const radiusChanged = prevRadiusRef.current !== radiusKm;
+    prevRadiusRef.current = radiusKm;
+    if (radiusChanged) {
       const latR = radiusKm / 110.574;
       const lngR = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
-      const pad = 1.2; // half-extent multiplier
+      const pad = 1.2;
       const bounds = new maplibregl.LngLatBounds(
         [lng - lngR * pad, lat - latR * pad],
         [lng + lngR * pad, lat + latR * pad],
       );
-      map.fitBounds(bounds, {
-        padding: 40,
-        pitch: 45,
-        bearing: -12,
-        duration: 600,
-      });
+      map.fitBounds(bounds, { padding: 40, pitch: 45, bearing: -12, duration: 600 });
     }
-  }, [map, lat, lng, radiusKm, hasLocation, ready, recenterKey]);
+  }, [map, lat, lng, radiusKm, hasLocation, ready]);
+
+  // --- Re-centre on explicit location request --------------------------------
+  // Fires whenever recenterKey bumps — every search, GPS tap, or repeated "use
+  // my location" while panned away. Reads coords from refs (not from the dep
+  // array) so this effect is triggered ONLY by explicit user requests and never
+  // by radius changes, which don't bump recenterKey.
+  useEffect(() => {
+    if (!map || !ready || !hasLocation || recenterKey === 0) return;
+    map.flyTo({
+      center: [lngRef.current, latRef.current],
+      zoom: 14.5,
+      pitch: 45,
+      bearing: -12,
+      duration: 1200,
+      essential: true,
+    });
+  }, [map, ready, hasLocation, recenterKey]);
 
   // --- Shop markers (one per shop, state-coloured) --------------------------
   useEffect(() => {
