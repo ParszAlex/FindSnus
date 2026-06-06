@@ -22,9 +22,16 @@ type Props = {
 // centre — where the user's location dot lands after a fly-to — stays visible
 // above the sheet: on an 844px viewport the sheet top sits at ~540px, ~118px
 // below centre (422px). Keep in sync with the h-[36dvh] max-h-[460px] classes.
+// Full stops the sheet top 22px below the floating search pill, which sits at
+// top: max(18px, env(safe-area-inset-top)) and is ~50px tall — keep in sync
+// with the h-[calc(100dvh-max(18px,env(safe-area-inset-top))-72px)] class.
 const PEEK_HEIGHT_PX = 86;
 const HALF_HEIGHT_DVH = 36;
 const HALF_HEIGHT_MAX_PX = 460;
+// Safe-area-0 value of the full-state top inset: 18px pill top + ~50px pill +
+// 22px gap. The CSS class uses max(18px, env(safe-area-inset-top)) instead of
+// the flat 18px.
+const FULL_TOP_INSET_PX = 90;
 // Pointer movement below this is a tap (toggles the sheet); above it, a drag.
 const DRAG_THRESHOLD_PX = 5;
 // Release velocity (px/ms) above which the sheet snaps in the flick
@@ -39,6 +46,14 @@ export function sheetHalfHeightPx(): number {
     (window.innerHeight * HALF_HEIGHT_DVH) / 100,
     HALF_HEIGHT_MAX_PX,
   );
+}
+
+// Pixel equivalent of the full-state CSS height, used as the drag clamp's
+// upper bound. env(safe-area-inset-top) isn't readable from JS, so this uses
+// the safe-area-0 inset — on notched devices the clamp is loose by the inset
+// and the post-release snap transition absorbs the difference.
+export function sheetFullHeightPx(): number {
+  return window.innerHeight - FULL_TOP_INSET_PX;
 }
 
 // Live geometry of an in-progress drag — shared by the handle's pointer
@@ -109,7 +124,9 @@ export default function MobileBottomSheet({
   loading,
   hasLocation,
 }: Props) {
-  const [sheetState, setSheetState] = useState<"peek" | "half">("peek");
+  const [sheetState, setSheetState] = useState<"peek" | "half" | "full">(
+    "peek",
+  );
   const [dragging, setDragging] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -127,14 +144,17 @@ export default function MobileBottomSheet({
     }
   }, [dragging]);
 
-  // When a shop is selected externally (e.g. map pin tap), snap to half.
+  // When a shop is selected externally (e.g. map pin tap), snap to half —
+  // unless the sheet is already at full, where the detail view fits fine.
   // Adjusted during render (React's documented alternative to an effect for
   // "reset state when an input changes") — mirrors the brandsKey pattern in
   // Locator.
   const [prevSelectedId, setPrevSelectedId] = useState(selectedShopId);
   if (selectedShopId !== prevSelectedId) {
     setPrevSelectedId(selectedShopId);
-    if (selectedShopId !== null) setSheetState("half");
+    if (selectedShopId !== null) {
+      setSheetState((s) => (s === "full" ? s : "half"));
+    }
   }
 
   // When a fetch completes (loading: true → false) and the user has a location,
@@ -147,7 +167,7 @@ export default function MobileBottomSheet({
     prevLoadingRef.current = loading;
   }, [loading, hasLocation]);
 
-  const showDetail = selectedShopId !== null && sheetState === "half";
+  const showDetail = selectedShopId !== null && sheetState !== "peek";
   const selectedShop = showDetail
     ? (allShops.find((s) => s.id === selectedShopId) ?? null)
     : null;
@@ -160,7 +180,8 @@ export default function MobileBottomSheet({
       onSelectShop(null);
       return;
     }
-    setSheetState((s) => (s === "peek" ? "half" : "peek"));
+    // Peek ↔ half toggle; a tap at full collapses one step to half.
+    setSheetState((s) => (s === "half" ? "peek" : "half"));
   }
 
   function handleClick() {
@@ -204,7 +225,7 @@ export default function MobileBottomSheet({
 
     const height = Math.min(
       Math.max(drag.startHeight + delta, PEEK_HEIGHT_PX),
-      sheetHalfHeightPx(),
+      sheetFullHeightPx(),
     );
     sheet.style.height = `${height}px`;
   }, []);
@@ -215,18 +236,35 @@ export default function MobileBottomSheet({
     if (drag === null || sheet === null) return;
     dragRef.current = null;
 
-    // Snap: a flick wins; otherwise whichever state is nearer. A drag down
-    // from the detail view collapses to peek but keeps the selection, so
-    // dragging back up returns to the same shop.
-    const midpoint = (PEEK_HEIGHT_PX + sheetHalfHeightPx()) / 2;
+    // Snap: nearest of the three snap points by released height — so a slow
+    // drag from full can fall straight through half to peek. A flick narrows
+    // the candidates to the snaps strictly in its direction from the released
+    // height, so a short flick advances one state but a long fast drag still
+    // lands where the finger left the sheet (never bouncing back past a snap
+    // the drag already crossed). A drag down from the detail view keeps the
+    // selection, so dragging back up returns to the same shop.
     const height = sheet.getBoundingClientRect().height;
+    const snaps = [
+      { state: "peek", px: PEEK_HEIGHT_PX },
+      { state: "half", px: sheetHalfHeightPx() },
+      { state: "full", px: sheetFullHeightPx() },
+    ] as const;
+    let candidates: readonly (typeof snaps)[number][] = snaps;
     if (drag.velocity > FLICK_VELOCITY_PX_PER_MS) {
-      setSheetState("peek");
+      candidates = snaps.filter((s) => s.px < height);
     } else if (drag.velocity < -FLICK_VELOCITY_PX_PER_MS) {
-      setSheetState("half");
-    } else {
-      setSheetState(height < midpoint ? "peek" : "half");
+      candidates = snaps.filter((s) => s.px > height);
     }
+    // Flicked at an extreme (nothing further in that direction): fall back to
+    // nearest overall, which is the extreme itself.
+    if (candidates.length === 0) candidates = snaps;
+    let nearest = candidates[0];
+    for (const snap of candidates) {
+      if (Math.abs(height - snap.px) < Math.abs(height - nearest.px)) {
+        nearest = snap;
+      }
+    }
+    setSheetState(nearest.state);
     setDragging(false);
   }, []);
 
@@ -270,7 +308,7 @@ export default function MobileBottomSheet({
   // left to the browser. preventDefault() on the deciding touchmove also
   // suppresses the trailing click, so a drag never selects a shop row.
   useEffect(() => {
-    if (sheetState !== "half") return; // body only mounts in half state
+    if (sheetState === "peek") return; // body only mounts in half/full states
     const body = bodyRef.current;
     if (body === null) return;
 
@@ -354,16 +392,25 @@ export default function MobileBottomSheet({
   }
 
   const sheetHeight =
-    sheetState === "peek" ? "h-[86px]" : "h-[36dvh] max-h-[460px]";
+    sheetState === "peek"
+      ? "h-[86px]"
+      : sheetState === "half"
+        ? "h-[36dvh] max-h-[460px]"
+        : "h-[calc(100dvh-max(18px,env(safe-area-inset-top))-72px)]";
 
   return (
     <div
       ref={sheetRef}
+      // While dragging, the inline height set by moveDrag is the sole height
+      // authority — the snap-state classes must come off entirely, because
+      // max-height beats inline height: leaving half's max-h-[460px] applied
+      // would pin the sheet at 460px under the finger AND make endDrag measure
+      // the clamped height, snapping a slow drag-to-top back to half.
       className={`absolute bottom-0 left-0 right-0 z-[1001] flex flex-col overflow-hidden rounded-t-[20px] bg-bg shadow-[0_-3px_20px_rgba(0,0,0,0.12)] ${
         dragging
           ? ""
-          : "transition-[height] duration-[380ms] ease-[cubic-bezier(.16,1,.3,1)]"
-      } ${sheetHeight}`}
+          : `transition-[height] duration-[380ms] ease-[cubic-bezier(.16,1,.3,1)] ${sheetHeight}`
+      }`}
     >
       {/* Drag handle area */}
       <div
@@ -413,8 +460,8 @@ export default function MobileBottomSheet({
         )}
       </div>
 
-      {/* Sheet body — only rendered in half state */}
-      {sheetState === "half" && (
+      {/* Sheet body — rendered in half and full states */}
+      {sheetState !== "peek" && (
         <div
           ref={bodyRef}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
