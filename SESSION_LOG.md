@@ -470,3 +470,120 @@
   design decisions (palette, type, components) are deferred to DESIGN.md, which
   is best generated once there's actual UI code to capture rather than guessed
   pre-build.
+
+## 2026-06-06 — Map-first locator redesign (design-system handoff)
+
+- **What changed:** Implemented the `Design System/` handoff (map-first, full-
+  bleed locator). Rewrote `Locator.tsx` (state shell) and `ShopMap.tsx`; added
+  four presentational components: `LocatorControls`, `BrandFilter`, `ShopPopup`,
+  `ResultsPill`. The map now fills the viewport with floating chrome over it:
+  search card + radius + "use my location" (top-left), brand-filter chips
+  (top-right), live results pill (bottom-centre), custom zoom (bottom-right).
+  - Tiles switched OSM → **CartoDB Positron** (muted/clinical, still no key).
+  - Markers are custom SVG `divIcon` pins whose fill encodes state (blue =
+    selected, white = stocks an active brand, grey = filtered out). Dashed
+    `<Circle>` radius indicator; animated "you are here" dot.
+  - Popup is a **React overlay, not a Leaflet `<Popup>`** — positioned from the
+    marker's `latLngToContainerPoint`, re-derived during render on every map
+    move/zoom so it stays pinned. Full styling control; shows brand → strengths
+    → prices, distance, address, "Not stocked here" rows, and a Verified badge.
+  - **Postcode search via postcodes.io** (`fetch` only, UK, no key) and
+    `navigator.geolocation`. Verified live: valid postcode recentres + refetches;
+    bad postcode shows an inline hint; geolocation failure shows a hint.
+  - `globals.css`: added `.leaflet-container` rule, `.user-ping` keyframes, and
+    named elevation tokens (`--shadow-float/popup/zoom/pill`) + `--color-border-
+    strong` so the cards/popup/pill share one shadow vocabulary.
+  - Data layer **unchanged** — still the one proven `getNearbyShopsWithListings`
+    fetch. Radius is user-facing miles, converted to km only for the query.
+- **Why:** Mould the new design into the existing stack per the handoff while
+  keeping every CLAUDE.md rule. Verified end-to-end with Playwright at 390 /
+  768 / 1440 px: age gate → confirm → map, marker select, brand toggle (count
+  4→3, shop greys out), radius 3→5 mi (circle grows + refetch), postcode
+  recentre, 0-shops empty state. `tsc --noEmit` and `eslint` both clean.
+- **Age gate:** **Untouched and still in force.** `app/page.tsx` still mounts
+  `<Locator>` only after `AgeGate` confirms; `AgeGate.tsx`, `SiteFooter.tsx`,
+  `Wordmark.tsx`, `lib/shops.ts`, `utils/` were not modified.
+- **Unsure about / flagged for review:**
+  - **Footer layout — deliberate deviation from the handoff.** The handoff put
+    the map at `fixed inset-0` with `<SiteFooter>` as an absolute overlay at the
+    bottom. Overlaying our existing ~180px footer covered the Leaflet tile
+    attribution (a legal requirement) and the zoom controls, and fought the
+    results pill. I used a flex column instead (`h-dvh` → map in a `flex-1`
+    region, footer in normal flow beneath). The map is full-bleed in its region
+    but is viewport-height **minus** the footer, not literally 100vh. This keeps
+    attribution + footer fully visible. Say the word if you want the literal
+    full-viewport map with the footer floating over it.
+  - **Responsive top rail is my addition** (handoff was desktop-only). The two
+    fixed-width cards (312 + 246) overlapped on narrow screens, so I wrap them
+    in a rail that stacks below `sm` and sits at opposite corners above it;
+    cards go full-width on mobile. Mobile still loses a fair bit of (shorter)
+    map to the stacked cards — a collapse/expand control would be better later.
+  - **Dropped the mockup's "+ Add brand" chip** (non-functional stub; CLAUDE.md
+    says locator-only, no fake UI). The popup footer shows only "Verified" when
+    `shop.verified` is true — the mockup's "Confirmed 2 days ago / 3 reports"
+    needs columns we don't surface yet, so omitted rather than invented.
+  - **Added shadow/border tokens** to `globals.css` (handoff said add only the
+    map-height util + ping). Justified: avoids repeating long oklch shadow
+    literals across four cards. Flag if you'd rather inline them.
+  - **React 19 lint shaped two patterns.** `react-hooks/set-state-in-effect`
+    rejected the handoff's `useEffect(() => setActiveBrands(...))` and the fetch
+    effect. The brand filter now resets by *adjusting state during render*
+    (keyed on the brand universe), and the fetch effect sets state only in the
+    promise callbacks (loading comes from handlers + initial state). Behaviour
+    is identical; both are documented React patterns.
+  - **Minor:** a selected shop right at the top edge can have its upward popup
+    slide partly under the top control card (card stacks above). Not broken,
+    just a corner-case overlap.
+  - Left the design's exact px as Tailwind arbitrary values (`px-[14px]` etc.)
+    rather than scale utilities — matches the spec 1:1 and the repo's existing
+    `text-[1.0625rem]` precedent. The IDE flags them as non-canonical; the lint
+    gate doesn't.
+- **What I'd do differently:** `formatDistance`/`formatPrice` now live in
+  `ShopPopup`; a third copy would justify a `lib/format.ts` — not yet. A mobile
+  collapse for the controls would reclaim map space. And I'd revisit the
+  footer-vs-full-viewport question with you rather than deciding it solo.
+
+## 2026-06-06 — Locator visual polish (footer + basemap)
+
+- **What changed:** Two small follow-ups at the user's request.
+  1. `SiteFooter.tsx` condensed from a tall three-paragraph block (~190px) to a
+     single small-print bar (~64px desktop): same compliance copy (18+, info-
+     tool-not-shop, no health claims, snus banned), now one `text-xs` line with
+     the copyright pushed right on `sm+`. Gives the map more vertical room.
+  2. `ShopMap.tsx` basemap swapped CartoDB **Positron → Voyager** (same provider,
+     no key, same attribution) — soft road/water/park colour and proper road
+     hierarchy instead of flat grey, which read as dated.
+- **Why:** User feedback: footer too tall, map felt outdated. `tsc`/`eslint`
+  clean; verified at 1440 + 390px.
+- **Unsure about / flagged for review:** Voyager adds gentle colour — still
+  restrained, but if it reads as too "lively" against the clinical brief,
+  Positron (`/light_all/`) or a dark theme (`/dark_all/`) are one-line swaps.
+- **What I'd do differently:** Nothing; both reversible one-liners.
+
+## 2026-06-06 — Stadia Maps "Alidade Smooth" basemap
+
+- **What changed:** In `components/ShopMap.tsx`, swapped the single `<TileLayer>`
+  from CartoDB Voyager to Stadia Maps "Alidade Smooth"
+  (`https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=…`).
+  URL and attribution are now computed from `process.env.NEXT_PUBLIC_STADIA_API_KEY`:
+  when the key is set, we use Stadia + the Stadia/OpenMapTiles/OpenStreetMap
+  attribution required by their TOS; when it's absent, both fall back to the old
+  Voyager URL and CARTO/OSM attribution so a missing key never renders a blank
+  grey grid. Nothing else touched — markers, popups, radius circle, zoom
+  controls, and MapController are unchanged.
+- **Why:** Stadia is a newly approved external map-tile provider (user signed up
+  for a free key). Alidade Smooth is a low-contrast basemap that lets the
+  brand-coloured pins read more clearly. The key uses the `NEXT_PUBLIC_` prefix
+  and is domain-restricted at Stadia's dashboard, so it is client-safe to expose.
+- **Verification:** `tsc --noEmit` passes; `next dev` compiles and serves `/`
+  (HTTP 200). Confirmed the `alidade_smooth` slug, `{z}/{x}/{y}{r}.png` path, and
+  `?api_key=` param are current against docs.stadiamaps.com, and that a direct
+  request to the tile endpoint returns 401 (auth required) rather than 404 —
+  i.e. host/slug/path are valid and only the key is missing on an unauth probe.
+- **Unsure about / flagged for review:** `NEXT_PUBLIC_STADIA_API_KEY` was not
+  actually present in my `.env.local` at runtime, so the live map currently
+  renders via the CartoDB fallback. Add the key locally (and to Vercel env) to
+  see Stadia tiles; the code path is correct and waiting on the key. Did not
+  live-confirm an authenticated Stadia tile fetch for that reason.
+- **What I'd do differently:** Nothing — the fallback makes this a safe,
+  reversible one-line provider swap.
