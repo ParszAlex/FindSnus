@@ -164,3 +164,9 @@ no-location empty state + smooth fly-in + stuck-loading fix.
 - Why: User wanted the tab title to read more human and the em dash gone.
 - Unsure about / flagged for review: Exact wording was my pick — easy to swap. `SiteFooter.tsx` still has one em dash in visible copy ("an information tool, not a shop"); left it since the ask was the title tag only.
 - What I'd do differently: Nothing — single-string change.
+
+## 2026-06-06 — Full-height bottom sheet + zoomed-out first load
+- What changed: (1) MobileBottomSheet gained a third "full" snap state — the sheet now drags all the way up to just below the search pill, with three-point snap logic (flick narrows candidates to snaps in its direction from the released height; slow drags snap to nearest, so full→peek in one gesture works). (2) First load now opens on a flat whole-UK overview (zoom 5, pitch 0) with no shop pins; the shop fetch is gated on hasLocation, loading initialises false, and ResultsPill/ShopList show "Enter a location to search" pre-search. Existing recenterKey flyTo provides the fly-in.
+- Why: users couldn't see the full nearby-shops list on mobile, and the old first load implied Airdrie was "your area" with seed pins before any location was given.
+- Unsure about / flagged for review: sheetFullHeightPx() uses safe-area-0 inset (env() unreadable from JS), so the drag clamp is loose by the notch inset; the post-release snap absorbs it — untested on a real notched device. Two review bugs found & fixed via Playwright: half's max-h-[460px] clamped the inline drag height (slow drag-to-top snapped back to half), and the original one-state-per-flick rule bounced a long fast downward drag from peek back to half.
+- What I'd do differently: spec drag-gesture acceptance cases (slow drag pass-through, long flick, short flick) up front — both bugs were in release/snap arbitration, not geometry.
