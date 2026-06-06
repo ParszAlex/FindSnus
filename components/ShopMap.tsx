@@ -127,7 +127,7 @@ export default function ShopMap({
   // --- Map init (once) -------------------------------------------------------
   useEffect(() => {
     if (!containerRef.current) return;
-    const map = new maplibregl.Map({
+    const instance = new maplibregl.Map({
       container: containerRef.current,
       style: buildStyle(),
       center: [lng, lat], // MapLibre is [lng, lat]
@@ -137,17 +137,17 @@ export default function ShopMap({
       pitch: 45,
       bearing: -12,
     });
-    setMap(map);
+    setMap(instance);
 
-    map.on("load", () => {
-      map.addSource(CIRCLE_SOURCE, {
+    instance.on("load", () => {
+      instance.addSource(CIRCLE_SOURCE, {
         type: "geojson",
         data: circleGeoJson(lat, lng, radiusKm),
       });
       // Soft fill + dashed outline, painted just under the building layer so
       // pins and buildings still sit on top.
-      const before = map.getLayer("building-flat") ? "building-flat" : undefined;
-      map.addLayer(
+      const before = instance.getLayer("building-flat") ? "building-flat" : undefined;
+      instance.addLayer(
         {
           id: "radius-fill",
           type: "fill",
@@ -156,7 +156,7 @@ export default function ShopMap({
         },
         before,
       );
-      map.addLayer(
+      instance.addLayer(
         {
           id: "radius-outline",
           type: "line",
@@ -172,12 +172,12 @@ export default function ShopMap({
       setReady(true);
     });
 
-    map.on("move", rerender);
-    map.on("zoom", rerender);
+    instance.on("move", rerender);
+    instance.on("zoom", rerender);
 
     const markers = markersRef.current;
     return () => {
-      map.remove();
+      instance.remove();
       setMap(null);
       setReady(false);
       markers.clear();
