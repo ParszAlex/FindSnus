@@ -211,21 +211,20 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
 }
 
 function WordmarkIcon() {
+  // The cartoon pouch sachet (same asset as the map markers) in the wordmark's
+  // 16px slot. It's landscape, so it takes the slot's width with auto height;
+  // the pill's items-center flex keeps it vertically centred.
   return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
+    /* eslint-disable-next-line @next/next/no-img-element -- 11KB static asset, no optimisation needed */
+    <img
+      src="/pouch-marker.png"
+      alt=""
+      width={16}
+      height={7}
+      draggable={false}
       aria-hidden="true"
-      className="shrink-0"
-    >
-      <path
-        d="M12 22c4.5-5.2 7-9 7-12.4A7 7 0 1 0 5 9.6C5 13 7.5 16.8 12 22Z"
-        fill="var(--color-primary)"
-      />
-      <circle cx="12" cy="9.4" r="2.6" fill="var(--color-on-primary)" />
-    </svg>
+      className="h-auto w-4 shrink-0 select-none"
+    />
   );
 }
 
