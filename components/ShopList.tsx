@@ -26,6 +26,9 @@ type Props = {
   onClose: () => void;
   radiusMi: number;
   loading: boolean;
+  /** False before the first location pick — no search has run, so prompt for a
+   *  location instead of claiming "0 shops" / "no shops stock…". */
+  hasLocation: boolean;
 };
 
 // 317.88 -> "320 m", 2245.39 -> "2.2 km". Matches <ShopPopup> exactly so the
@@ -62,6 +65,7 @@ export default function ShopList({
   onClose,
   radiusMi,
   loading,
+  hasLocation,
 }: Props) {
   const radiusLabel = `${radiusMi} ${radiusMi === 1 ? "mile" : "miles"}`;
 
@@ -94,9 +98,11 @@ export default function ShopList({
             <p className="mt-[2px] text-xs text-muted">
               {loading
                 ? "Searching nearby…"
-                : `${shops.length} ${
-                    shops.length === 1 ? "shop" : "shops"
-                  } within ${radiusLabel}`}
+                : !hasLocation
+                  ? "Enter a location to search"
+                  : `${shops.length} ${
+                      shops.length === 1 ? "shop" : "shops"
+                    } within ${radiusLabel}`}
             </p>
           </div>
           <button
@@ -115,7 +121,9 @@ export default function ShopList({
             <p className="px-[16px] py-[18px] text-sm text-muted">
               {loading
                 ? "Searching nearby…"
-                : "No shops stock the selected brands in this area. Try widening the radius or selecting more brands."}
+                : !hasLocation
+                  ? "Search a postcode or use your location to find nearby shops."
+                  : "No shops stock the selected brands in this area. Try widening the radius or selecting more brands."}
             </p>
           ) : (
             <ul>

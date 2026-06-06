@@ -30,7 +30,9 @@ const ShopMap = dynamic(() => import("./ShopMap"), {
   loading: () => <div className="size-full bg-surface" />,
 });
 
-// Default centre: Airdrie, matching the existing seed data.
+// Fallback fetch centre: Airdrie, matching the existing seed data. The user
+// never sees this as a view — the map opens on a whole-UK overview and no
+// fetch runs until they pick a real location.
 const DEFAULT_LAT = 55.8657;
 const DEFAULT_LNG = -3.9803;
 const DEFAULT_RADIUS_MI = 1;
@@ -42,15 +44,17 @@ export default function Locator() {
   const [lng, setLng] = useState(DEFAULT_LNG);
   const [radiusMi, setRadiusMi] = useState(DEFAULT_RADIUS_MI);
   const [shops, setShops] = useState<ShopWithListings[]>([]);
-  const [loading, setLoading] = useState(true);
+  // No initial fetch (it's gated on hasLocation below), so not loading on mount.
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [activeBrands, setActiveBrands] = useState<Set<string>>(new Set());
   const [brandsKey, setBrandsKey] = useState("");
   const [catalogue, setCatalogue] = useState<string[]>([]);
   // False until the user picks a location (search or "use my location"). Gates
-  // the radius ring + "you are here" dot + the close fly-in in ShopMap; on first
-  // load the map sits at the Airdrie default with shop pins but no ring/dot.
+  // the shop fetch here and the radius ring + "you are here" dot + the close
+  // fly-in in ShopMap; on first load the map sits at a flat whole-UK overview
+  // with no pins, ring, or dot.
   const [hasLocation, setHasLocation] = useState(false);
   // Whether the left-side list drawer is open.
   const [listOpen, setListOpen] = useState(false);
@@ -128,10 +132,13 @@ export default function Locator() {
       : allBrands.filter((b) => activeBrands.has(b));
   }, [allBrands, activeBrands]);
 
-  // One fetch per (centre, radius). State is set only in the promise callbacks,
-  // never synchronously in the effect body; the immediate "loading" feedback is
-  // set by the handlers that change those inputs (and by the initial state).
+  // One fetch per (centre, radius), and none at all until the user picks a
+  // location — first load shows the whole-UK overview with no pins. State is set
+  // only in the promise callbacks, never synchronously in the effect body; the
+  // immediate "loading" feedback is set by the handlers that change these inputs
+  // (handleLocationChange flips hasLocation, so the first pick lands here too).
   useEffect(() => {
+    if (!hasLocation) return;
     let active = true;
     getNearbyShopsWithListings(lat, lng, radiusKm)
       .then((result) => {
@@ -154,7 +161,7 @@ export default function Locator() {
     // still re-runs this effect and resolves the loading state — the backstop for
     // Issue 3. The handlers only bump the nonce + set loading when something will
     // actually change, so this never causes a redundant fetch on a true no-op.
-  }, [lat, lng, radiusKm, fetchNonce]);
+  }, [hasLocation, lat, lng, radiusKm, fetchNonce]);
 
   // A shop is visible while it stocks at least one active brand. Filtered-out
   // shops still render on the map (greyed), so the map never silently empties.
@@ -192,7 +199,10 @@ export default function Locator() {
     // (nothing to fetch), which also can't get stuck since the effect won't run.
     if (miles === radiusMi) return;
     setSelectedShopId(null);
-    setLoading(true);
+    // Before a location is picked the fetch effect is gated off, so entering
+    // loading here would stick forever — just record the radius for the
+    // eventual first search.
+    if (hasLocation) setLoading(true);
     setRadiusMi(miles);
   }
 
@@ -261,6 +271,7 @@ export default function Locator() {
             onClose={() => setListOpen(false)}
             radiusMi={radiusMi}
             loading={loading}
+            hasLocation={hasLocation}
           />
         </div>
 
@@ -289,6 +300,7 @@ export default function Locator() {
             radiusMi={radiusMi}
             loading={loading}
             error={error}
+            hasLocation={hasLocation}
             listOpen={listOpen}
             onToggleList={() => setListOpen((o) => !o)}
           />

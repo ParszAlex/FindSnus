@@ -52,8 +52,9 @@ type Props = {
   allShops: ShopWithListings[];
   center: [number, number];
   radiusKm: number;
-  /** False until the user picks a location: hide the ring + user dot, and don't
-   *  auto-pan. Once true, the ring + dot appear and the map flies in. */
+  /** False until the user picks a location: open on the whole-UK overview, hide
+   *  the ring + user dot, and don't auto-pan. Once true, the ring + dot appear
+   *  and the map flies in. */
   hasLocation: boolean;
   selectedShopId: string | null;
   onSelectShop: (id: string | null) => void;
@@ -236,11 +237,15 @@ export default function ShopMap({
     const instance = new maplibregl.Map({
       container: containerRef.current,
       style: buildStyle(dark),
-      center: [lng, lat], // MapLibre is [lng, lat]
-      zoom: 13,
+      // No location yet (always the case on first mount — Locator initialises
+      // hasLocation false): open on a flat whole-UK overview; the tilted
+      // close-up view only suits a chosen locality. maxBounds clamps this to
+      // the closest fit on wide viewports. The recenterKey flyTo below restores
+      // zoom 14.5 / pitch 45 / bearing -12 once the user picks a location.
+      ...(hasLocation
+        ? { center: [lng, lat] as [number, number], zoom: 13, pitch: 45, bearing: -12 } // MapLibre is [lng, lat]
+        : { center: [-3.5, 54.8] as [number, number], zoom: 5, pitch: 0, bearing: 0 }),
       attributionControl: false,
-      pitch: 45,
-      bearing: -12,
       // Restrict panning to the UK + nearby waters so users can't scroll to
       // unrelated regions and trigger unnecessary tile fetches.
       maxBounds: [[-10.5, 49.5], [2.2, 61.5]] as [[number, number], [number, number]],
@@ -266,8 +271,10 @@ export default function ShopMap({
       markers.clear();
       userMarkerRef.current = null;
     };
-    // Intentionally run once: subsequent center/radius changes are handled by
-    // the dedicated effects below, not by re-creating the map.
+    // Intentionally run once: subsequent center/radius/hasLocation changes are
+    // handled by the dedicated effects below, not by re-creating the map.
+    // hasLocation is read here only for the initial camera (always false on
+    // first mount).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

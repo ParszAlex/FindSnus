@@ -9,6 +9,9 @@ type Props = {
   radiusMi: number;
   loading: boolean;
   error: boolean;
+  /** False before the first location pick — no search has run, so show a
+   *  prompt instead of a misleading "0 shops" count. */
+  hasLocation: boolean;
   /** Whether the left-side list drawer is open (drives the button's state). */
   listOpen: boolean;
   /** Toggle the list drawer open/closed. */
@@ -20,6 +23,7 @@ export default function ResultsPill({
   radiusMi,
   loading,
   error,
+  hasLocation,
   listOpen,
   onToggleList,
 }: Props) {
@@ -31,6 +35,9 @@ export default function ResultsPill({
         <span>Couldn’t load shops</span>
       ) : loading ? (
         <span>Searching nearby…</span>
+      ) : !hasLocation ? (
+        // Same prompt the mobile sheet shows before the first location pick.
+        <span>Enter a location to search</span>
       ) : (
         <span>
           <b className="font-bold">
