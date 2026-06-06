@@ -157,3 +157,10 @@ no-location empty state + smooth fly-in + stuck-loading fix.
 - Why: After searching e.g. "glasgow" on mobile, the pill collapsed back to the empty placeholder even though the map had panned — the collapsed branch was a static button that never showed `query`, and Cancel wiped it. Searched text should stay visible, like every mapping app.
 - Unsure about / flagged for review: Clearing `submitted` on GPS success was a judgement call (the alternative — keeping the old text — felt wrong with the map elsewhere). `select()` after `focus()` works on iOS Safari in my reading of current docs, but worth a real-device sanity check.
 - What I'd do differently: Nothing significant — small surgical change. Note: full `pnpm lint` fails on pre-existing errors in `app/page.tsx`, `AgeGate.tsx`, and untracked skill scripts; this file lints clean.
+
+## 2026-06-06 — Reword page title (drop the em dash)
+
+- What changed: `app/layout.tsx` metadata title in all three spots (main, OpenGraph, Twitter): "findsnus — find UK shops that stock your nicotine pouches" → "findsnus: nicotine pouch stockists near you".
+- Why: User wanted the tab title to read more human and the em dash gone.
+- Unsure about / flagged for review: Exact wording was my pick — easy to swap. `SiteFooter.tsx` still has one em dash in visible copy ("an information tool, not a shop"); left it since the ask was the title tag only.
+- What I'd do differently: Nothing — single-string change.

@@ -22,18 +22,18 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://find-snus-imbg.vercel.app"),
-  title: "findsnus — find UK shops that stock your nicotine pouches",
+  title: "findsnus: nicotine pouch stockists near you",
   description:
     "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",
   openGraph: {
     type: "website",
-    title: "findsnus — find UK shops that stock your nicotine pouches",
+    title: "findsnus: nicotine pouch stockists near you",
     description:
       "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "findsnus — find UK shops that stock your nicotine pouches",
+    title: "findsnus: nicotine pouch stockists near you",
     description:
       "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",
   },
