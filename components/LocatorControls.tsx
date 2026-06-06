@@ -18,12 +18,15 @@ type Props = {
   loading: boolean;
 };
 
-// postcodes.io: GET /postcodes/:postcode → { result: { latitude, longitude } }.
-// Returns null on any miss (bad/unknown postcode, network) so the caller can
-// show a single, friendly inline message rather than leaking fetch internals.
-async function geocodePostcode(
-  query: string,
-): Promise<{ lat: number; lng: number } | null> {
+type Coords = { lat: number; lng: number };
+
+// Loose UK postcode shape (case-insensitive, optional inner space). Used only to
+// pick which endpoint to try first — not for validation — so we stay forgiving.
+const UK_POSTCODE_RE = /^[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}$/i;
+
+// postcodes.io: GET /postcodes/:postcode → { result: { latitude, longitude } }
+// (a single object). Returns null on any miss (bad/unknown postcode, network).
+async function geocodePostcode(query: string): Promise<Coords | null> {
   try {
     const r = await fetch(
       `https://api.postcodes.io/postcodes/${encodeURIComponent(query)}`,
@@ -37,6 +40,35 @@ async function geocodePostcode(
   }
 }
 
+// postcodes.io: GET /places?q=:query → { result: [ { latitude, longitude } ] }
+// (an array, best match first; empty array on a miss). Covers UK towns,
+// villages and cities. Returns null on any miss so callers branch uniformly.
+async function geocodePlace(query: string): Promise<Coords | null> {
+  try {
+    const r = await fetch(
+      `https://api.postcodes.io/places?q=${encodeURIComponent(query)}`,
+    );
+    if (!r.ok) return null;
+    const { result } = await r.json();
+    const top = Array.isArray(result) ? result[0] : null;
+    if (!top) return null;
+    return { lat: top.latitude, lng: top.longitude };
+  } catch {
+    return null;
+  }
+}
+
+// Resolve a free-text UK query to coordinates. Routes by input: postcode-shaped
+// queries hit /postcodes first, everything else hits /places first; each falls
+// back to the other so a mistyped postcode or odd place name still has a chance.
+async function geocodeQuery(query: string): Promise<Coords | null> {
+  const looksLikePostcode = UK_POSTCODE_RE.test(query);
+  const [first, second] = looksLikePostcode
+    ? [geocodePostcode, geocodePlace]
+    : [geocodePlace, geocodePostcode];
+  return (await first(query)) ?? (await second(query));
+}
+
 export default function LocatorControls({
   radiusMi,
   onRadiusChange,
@@ -45,6 +77,7 @@ export default function LocatorControls({
 }: Props) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
 
   async function handleSearch(e: React.FormEvent) {
@@ -53,29 +86,37 @@ export default function LocatorControls({
     if (!q) return;
     setSearching(true);
     setHint(null);
-    const coords = await geocodePostcode(q);
+    const coords = await geocodeQuery(q);
     setSearching(false);
     if (!coords) {
-      setHint("We couldn’t find that postcode. Check it and try again.");
+      setHint("We couldn’t find that place. Check the spelling and try again.");
       return;
     }
     onLocationChange(coords.lat, coords.lng);
   }
 
   function handleUseMyLocation() {
+    if (locating) return;
     if (!("geolocation" in navigator)) {
       setHint("Your browser can’t share your location.");
       return;
     }
     setHint(null);
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => onLocationChange(pos.coords.latitude, pos.coords.longitude),
-      () =>
-        setHint("We couldn’t get your location. Enter a postcode instead."),
+      (pos) => {
+        setLocating(false);
+        onLocationChange(pos.coords.latitude, pos.coords.longitude);
+      },
+      () => {
+        setLocating(false);
+        setHint("We couldn’t get your location. Enter a postcode instead.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   }
 
-  const busy = searching || loading;
+  const busy = searching || locating || loading;
 
   return (
     <section
@@ -137,10 +178,12 @@ export default function LocatorControls({
           <button
             type="button"
             onClick={handleUseMyLocation}
-            className="inline-flex h-[42px] flex-[1.1] items-center justify-center gap-[7px] rounded-[10px] bg-primary text-sm font-semibold whitespace-nowrap text-on-primary transition-[background-color,transform] hover:bg-primary-hover active:translate-y-px"
+            disabled={locating}
+            aria-busy={locating}
+            className="inline-flex h-[42px] flex-[1.1] items-center justify-center gap-[7px] rounded-[10px] bg-primary text-sm font-semibold whitespace-nowrap text-on-primary transition-[background-color,transform] hover:bg-primary-hover active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
           >
-            <PinIcon />
-            Use my location
+            {locating ? <SpinnerIcon /> : <PinIcon />}
+            {locating ? "Locating…" : "Use my location"}
           </button>
         </div>
 
