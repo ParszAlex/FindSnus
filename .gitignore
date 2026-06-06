@@ -45,3 +45,6 @@ node_modules/
 
 # local verification screenshots (not source)
 /.screenshots/
+
+# raw AI-generated art sources (processed assets live in /public)
+/Gemini_Generated_Image_*.png
