@@ -19,6 +19,14 @@ export type Listing = {
   price: number;
 };
 
+// A brand from the catalogue. A brand can exist with zero listings (newly
+// seeded, stocked nowhere yet), so the full set has to be read from `brands`
+// directly — it can never be reconstructed from shop listings alone.
+export type Brand = {
+  id: string;
+  name: string;
+};
+
 // The §4 shape: shop columns + distance_m + its listings.
 export type ShopWithListings = Shop & { listings: Listing[] };
 
@@ -70,4 +78,18 @@ export async function getNearbyShopsWithListings(
     byShop.set(l.shop_id, group);
   }
   return shops.map((s) => ({ ...s, listings: byShop.get(s.id) ?? [] }));
+}
+
+// The complete brand catalogue, alphabetical by name. This is the locator's
+// brand *universe*: it includes brands with zero listings (so a freshly seeded
+// brand stocked nowhere still appears in the filter and as an explicit "Not
+// stocked here" in popups), which a listing-derived set could never surface.
+export async function getAllBrands(): Promise<Brand[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("brands")
+    .select("id, name")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as Brand[];
 }

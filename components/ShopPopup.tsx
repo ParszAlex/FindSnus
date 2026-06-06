@@ -4,13 +4,16 @@
 // Leaflet container (NOT a Leaflet <Popup>), so React owns its content and
 // styling completely. <ShopMap> computes the pixel anchor from the marker's
 // screen position and passes it in via `x` / `bottom`; this component is purely
-// presentational. Brand rows are driven off the full `allBrands` universe so a
-// brand a shop doesn't carry shows an explicit "Not stocked here".
+// presentational. Brand rows are driven off `allBrands`, which <Locator> has
+// already resolved against the active filter: the full catalogue when no filter
+// is set, or just the selected brands otherwise. Each brand renders as a stocked
+// row (strength/price) or an explicit "Not stocked here".
 
 import type { Listing, ShopWithListings } from "@/lib/shops";
 
 type Props = {
   shop: ShopWithListings;
+  /** Brands to show, already resolved against the filter (full set or selection). */
   allBrands: string[];
   /** Marker x, and distance from the container's bottom edge, both in px. */
   x: number;

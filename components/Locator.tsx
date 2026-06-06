@@ -10,6 +10,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import {
+  getAllBrands,
   getNearbyShopsWithListings,
   type ShopWithListings,
 } from "@/lib/shops";
@@ -42,35 +43,71 @@ export default function Locator() {
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [activeBrands, setActiveBrands] = useState<Set<string>>(new Set());
   const [brandsKey, setBrandsKey] = useState("");
+  const [catalogue, setCatalogue] = useState<string[]>([]);
 
   const radiusKm = radiusMi * MILE_KM;
   const center = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
 
-  // Brand universe = every brand across the returned shops, alphabetical. The
-  // filter and the popups both read this so a brand a shop doesn't carry can be
-  // shown as an explicit "Not stocked here".
+  // The brand universe is the full `brands` catalogue — including brands with
+  // zero listings, which no shop carries and so could never be recovered from
+  // listings alone. We still union in any brand a returned shop actually lists,
+  // so a listing referencing a brand not yet in the fetched catalogue (data
+  // drift) is never silently dropped. This universe drives both the filter chips
+  // and the popup's "all brands" view, so a brand a shop lacks shows as an
+  // explicit "Not stocked here".
   const allBrands = useMemo(
     () =>
       [
-        ...new Set(
-          shops.flatMap((s) =>
+        ...new Set([
+          ...catalogue,
+          ...shops.flatMap((s) =>
             s.listings
               .map((l) => l.brand)
               .filter((b): b is string => b !== null),
           ),
-        ),
+        ]),
       ].sort(),
-    [shops],
+    [catalogue, shops],
   );
 
+  // Fetch the full brand catalogue once on mount. It's location-independent, so
+  // unlike the shop fetch it doesn't re-run when the centre or radius changes.
+  useEffect(() => {
+    let active = true;
+    getAllBrands()
+      .then((brands) => {
+        if (active) setCatalogue(brands.map((b) => b.name));
+      })
+      .catch(() => {
+        // Non-fatal: allBrands falls back to the listing-derived set above, so
+        // the locator still works — it just won't show zero-listing brands.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Reset the brand filter to "all active" whenever the brand universe changes
-  // (a fetch returned a different set). Adjusting state during render is React's
-  // documented alternative to an effect for "reset state when an input changes".
+  // (the catalogue loaded, or a fetch surfaced a new listing brand). Adjusting
+  // state during render is React's documented alternative to an effect for
+  // "reset state when an input changes".
   const nextBrandsKey = allBrands.join("|");
   if (nextBrandsKey !== brandsKey) {
     setBrandsKey(nextBrandsKey);
     setActiveBrands(new Set(allBrands));
   }
+
+  // The brand set the popup shows, RESPECTING the filter. With no filter active
+  // — nothing selected, or every brand selected (the default) — the popup shows
+  // the complete universe. With a specific selection, it shows only those
+  // brands. Each resolves to a stocked row or an explicit "Not stocked here".
+  const popupBrands = useMemo(() => {
+    const noFilter =
+      activeBrands.size === 0 || activeBrands.size === allBrands.length;
+    return noFilter
+      ? allBrands
+      : allBrands.filter((b) => activeBrands.has(b));
+  }, [allBrands, activeBrands]);
 
   // One fetch per (centre, radius). State is set only in the promise callbacks,
   // never synchronously in the effect body; the immediate "loading" feedback is
@@ -129,7 +166,9 @@ export default function Locator() {
           radiusKm={radiusKm}
           selectedShopId={selectedShopId}
           onSelectShop={setSelectedShopId}
-          allBrands={allBrands}
+          // The popup's brand list, already resolved against the active filter.
+          // ShopMap forwards this straight to ShopPopup; markers don't read it.
+          allBrands={popupBrands}
         />
 
         {/* Top rail: the two cards sit at opposite corners on desktop and stack

@@ -1,9 +1,10 @@
 "use client";
 
-// Floating top-right brand filter. The brand universe is derived upstream (in
-// <Locator>) from the shops actually returned, so this only renders chips and
-// reports toggles back up via `onChange`. A shop stays visible while it stocks
-// any active brand; toggling all off is allowed (the map simply empties).
+// Floating top-right brand filter. The brand universe is the full `brands`
+// catalogue, resolved upstream (in <Locator>) — so brands stocked nowhere still
+// appear as chips. This only renders chips and reports toggles back up via
+// `onChange`. A shop stays visible while it stocks any active brand; toggling
+// all off is allowed (the map simply empties).
 
 type Props = {
   brands: string[];

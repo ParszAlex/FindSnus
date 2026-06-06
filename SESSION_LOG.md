@@ -587,3 +587,40 @@
   live-confirm an authenticated Stadia tile fetch for that reason.
 - **What I'd do differently:** Nothing — the fallback makes this a safe,
   reversible one-line provider swap.
+
+## 2026-06-06 — Popup brand availability respects the filter (+ full brand universe)
+
+- **What changed:** The shop popup's brand list now (a) includes brands with
+  zero listings and (b) respects the active brand filter.
+  - `lib/shops.ts`: added a `Brand` type and `getAllBrands()` — reads the full
+    `brands` catalogue (id, name) ordered by name. A zero-listing brand (e.g.
+    the newly seeded Pablo/Killa, stocked nowhere) can never be reconstructed
+    from shop listings, so the universe has to come from `brands` directly.
+  - `Locator.tsx`: fetches the catalogue once on mount (location-independent,
+    so it doesn't re-run on centre/radius change) and **unions** it with the
+    brands actually listed by returned shops (so data drift never drops a
+    listing's brand). Derived `popupBrands` resolves against the filter — no
+    filter active (nothing selected, or all selected = the default) → the full
+    universe; a specific selection → only those brands — and passes that to the
+    popup. The filter chips still receive the full universe, so Pablo/Killa
+    appear as toggleable chips.
+  - `ShopPopup.tsx` / `BrandFilter.tsx`: comment-only updates documenting that
+    the popup receives an already-filter-resolved brand set.
+- **Why:** User report — filtering to one brand still showed unrelated brands as
+  "Not stocked here", and the new zero-listing brands never appeared at all. User
+  chose "respect the filter": filter = {Nordic Spirit} → Coatbridge popup shows
+  only Nordic Spirit; no filter → shows every brand incl. Pablo/Killa as "Not
+  stocked here". Pablo/Killa are tobacco-free nicotine pouch brands.
+- **Unsure about / flagged for review:**
+  - `getAllBrands()` is a second client round-trip on mount (separate from the
+    per-location shop fetch). Cheap and cached by React state; fine for the
+    catalogue size, revisit only if the brand list grows large.
+  - Catalogue fetch failure is non-fatal: `allBrands` falls back to the
+    listing-derived set, so the locator still works — it just won't surface
+    zero-listing brands until the fetch succeeds.
+  - "No filter" is treated as `size === 0 || size === allBrands.length`. That
+    matches the existing default (all chips active), so the full universe shows
+    on first load — intended.
+- **What I'd do differently:** Nothing structural. If the popup ever needs to
+  distinguish "deselected" from "carried-but-filtered-out", that'd be a separate
+  presentational concern, not a data change.
