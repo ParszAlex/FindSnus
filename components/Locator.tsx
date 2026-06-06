@@ -30,7 +30,7 @@ const ShopMap = dynamic(() => import("./ShopMap"), {
 // Default centre: Airdrie, matching the existing seed data.
 const DEFAULT_LAT = 55.8657;
 const DEFAULT_LNG = -3.9803;
-const DEFAULT_RADIUS_MI = 3;
+const DEFAULT_RADIUS_MI = 1;
 
 const MILE_KM = 1.609344; // exact; radius is shown in miles but fetched in km.
 

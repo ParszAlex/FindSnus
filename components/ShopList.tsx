@@ -81,10 +81,9 @@ export default function ShopList({
         // Stop map drag/scroll from leaking through the panel to the canvas.
         onMouseDown={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
-        className={`pointer-events-auto m-[18px] flex w-[330px] max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-bg shadow-float ${
+        className={`pointer-events-auto mx-[18px] mb-[18px] mt-[200px] sm:m-[18px] flex w-[330px] max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-bg shadow-float max-h-[calc(100%-218px)] sm:max-h-[calc(100%-36px)] ${
           open ? "" : "invisible"
         }`}
-        style={{ maxHeight: "calc(100% - 36px)" }}
       >
         {/* Header: title + live count + close. */}
         <div className="flex items-center justify-between gap-2.5 border-b border-border px-[16px] pt-[14px] pb-[13px]">

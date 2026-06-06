@@ -12,6 +12,18 @@ export const metadata: Metadata = {
   title: "findsnus — find UK shops that stock your nicotine pouches",
   description:
     "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",
+  openGraph: {
+    type: "website",
+    title: "findsnus — find UK shops that stock your nicotine pouches",
+    description:
+      "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "findsnus — find UK shops that stock your nicotine pouches",
+    description:
+      "A cross-brand store locator for tobacco-free nicotine pouches in the UK. Enter a postcode to see which shops near you stock which brands, and at what price.",
+  },
 };
 
 export default function RootLayout({
