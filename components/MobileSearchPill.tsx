@@ -51,6 +51,9 @@ async function geocodeQuery(query: string): Promise<Coords | null> {
 
 export default function MobileSearchPill({ onLocationChange, loading }: Props) {
   const [query, setQuery] = useState("");
+  // Last successfully geocoded query — shown in the collapsed pill so the
+  // searched location stays visible while the user pans the map.
+  const [submitted, setSubmitted] = useState("");
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -69,6 +72,7 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
       setHint("We couldn't find that place. Check the spelling and try again.");
       return;
     }
+    setSubmitted(q);
     setSearchFocused(false);
     onLocationChange(coords.lat, coords.lng);
   }
@@ -84,6 +88,8 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false);
+        // GPS supersedes any earlier text search — drop the stale label.
+        setSubmitted("");
         onLocationChange(pos.coords.latitude, pos.coords.longitude);
       },
       () => {
@@ -97,14 +103,18 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
   function openSearch() {
     flushSync(() => {
       setSearchFocused(true);
+      setQuery(submitted);
       setHint(null);
     });
     inputRef.current?.focus();
+    // Pre-select the previous query so typing replaces it in one go.
+    inputRef.current?.select();
   }
 
   function cancelSearch() {
     setSearchFocused(false);
-    setQuery("");
+    // Revert to the last successful search rather than wiping it.
+    setQuery(submitted);
     setHint(null);
   }
 
@@ -166,9 +176,15 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
               </span>
               <span className="h-[18px] w-px shrink-0 bg-border" />
               <SearchIcon className="shrink-0 text-muted" />
-              <span className="text-[13px] text-muted">
-                Enter postcode or town
-              </span>
+              {submitted ? (
+                <span className="truncate text-[13px] text-ink">
+                  {submitted}
+                </span>
+              ) : (
+                <span className="text-[13px] text-muted">
+                  Enter postcode or town
+                </span>
+              )}
             </button>
 
             <button
