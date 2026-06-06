@@ -109,7 +109,7 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
   }
 
   const glassBase =
-    "bg-white/[0.94] backdrop-blur-xl border border-black/[0.08] shadow-[0_2px_10px_rgba(0,0,0,0.13),0_1px_3px_rgba(0,0,0,0.06)]";
+    "bg-white/[0.94] backdrop-blur-xl border border-black/[0.08] shadow-[0_2px_10px_rgba(0,0,0,0.13),0_1px_3px_rgba(0,0,0,0.06)] dark:bg-surface/[0.92] dark:border-white/[0.10]";
 
   return (
     <div
@@ -125,7 +125,7 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
               // has an `action`; without it the return key stays "Done"/"return".
               // Never navigates — handleSearch calls preventDefault() first.
               action="#"
-              className="flex h-11 flex-1 items-center gap-2.5 rounded-[14px] border border-primary bg-white/[0.98] px-3.5 shadow-[0_0_0_3px_oklch(0.40_0.14_255_/_0.18),0_2px_10px_rgba(0,0,0,0.12)]"
+              className="flex h-11 flex-1 items-center gap-2.5 rounded-[14px] border border-primary bg-white/[0.98] px-3.5 shadow-[0_0_0_3px_oklch(0.40_0.14_255_/_0.18),0_2px_10px_rgba(0,0,0,0.12)] dark:bg-surface/[0.98] dark:shadow-[0_0_0_3px_oklch(0.64_0.105_255_/_0.22),0_2px_10px_rgba(0,0,0,0.4)]"
             >
               {searching || loading ? (
                 <SpinnerIcon className="shrink-0 text-primary" />

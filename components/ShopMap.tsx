@@ -24,16 +24,26 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ShopWithListings } from "@/lib/shops";
-import { buildStyle } from "@/lib/mapStyle";
+import { buildStyle, MAP_BG } from "@/lib/mapStyle";
 import { sheetHalfHeightPx } from "./MobileBottomSheet";
+import { useTheme } from "./ThemeProvider";
 import ShopPopup from "./ShopPopup";
 
-// The single brand blue, as a literal — MapLibre paints its own GL canvas/DOM
+// The brand blue per theme, as literals — MapLibre paints its own GL canvas/DOM
 // markers, so it can't read our Tailwind/CSS custom properties. The HTML markers
 // (real DOM/CSS) take the oklch; the GL paint validator only accepts legacy CSS
-// colours, so the radius layers use the sRGB hex equivalent of the same blue.
-const BRAND = "oklch(0.4 0.14 255)";
-const BRAND_HEX = "#004590"; // == oklch(0.4 0.14 255) in sRGB
+// colours, so the radius layers use the sRGB hex equivalents. The dark values
+// mirror the lightened --color-primary in globals.css's .dark block.
+const BRAND = {
+  light: "oklch(0.4 0.14 255)",
+  dark: "oklch(0.64 0.105 255)",
+} as const;
+const BRAND_HEX = {
+  light: "#004590", // == oklch(0.4 0.14 255) in sRGB
+  dark: "#5a8fd0", // ≈ oklch(0.64 0.105 255) in sRGB
+} as const;
+
+type ThemeName = keyof typeof BRAND;
 
 type Props = {
   /** Shops matching the active brand filter (drives marker fill + popup data). */
@@ -55,20 +65,44 @@ type Props = {
   recenterKey: number;
 };
 
-// A teardrop pin whose fills encode state. Returned as an HTML string for a
-// custom maplibregl.Marker element.
-function pinSvg(isSelected: boolean, isOut: boolean): string {
-  const body = isSelected ? BRAND : isOut ? "oklch(0.985 0 0)" : "white";
-  const stroke = isSelected ? BRAND : "oklch(0.91 0 0)";
-  const dot = isSelected ? "white" : isOut ? "oklch(0.46 0 0)" : BRAND;
+// A teardrop pin whose fills encode state, per theme. In dark mode the active
+// pin stays near-white (the brightest thing on the night map, as intended),
+// selected takes the lightened dark brand blue, and filtered-out pins recede
+// into muted slate instead of washing out white-on-dark.
+function pinSvg(isSelected: boolean, isOut: boolean, theme: ThemeName): string {
+  const brand = BRAND[theme];
+  const body = isSelected
+    ? brand
+    : isOut
+      ? theme === "dark"
+        ? "#3a4458"
+        : "oklch(0.985 0 0)"
+      : theme === "dark"
+        ? "#e8ebf2"
+        : "white";
+  const stroke = isSelected
+    ? brand
+    : theme === "dark"
+      ? "#262e3d"
+      : "oklch(0.91 0 0)";
+  const dot = isSelected
+    ? theme === "dark"
+      ? "#1b2029"
+      : "white"
+    : isOut
+      ? theme === "dark"
+        ? "#9aa2b3"
+        : "oklch(0.46 0 0)"
+      : BRAND.light;
   return `<svg width="30" height="40" viewBox="0 0 30 40" style="display:block;filter:drop-shadow(0 3px 4px oklch(0 0 0 / .28))"><path fill="${body}" stroke="${stroke}" stroke-width="1" d="M15 1C7.3 1 1 7.1 1 14.6 1 24 15 39 15 39s14-15 14-24.4C29 7.1 22.7 1 15 1Z"/><circle fill="${dot}" cx="15" cy="14.5" r="5.4"/></svg>`;
 }
 
 // "You are here": a solid blue dot with a white ring and a looping pulse. The
-// pulse lives in globals.css (.user-ping).
-function userMarkerEl(): HTMLElement {
+// pulse lives in globals.css (.user-ping) and follows --color-primary, so only
+// the dot fill needs the theme; the ring effect re-tints it on theme change.
+function userMarkerEl(theme: ThemeName): HTMLElement {
   const el = document.createElement("div");
-  el.style.cssText = `width:18px;height:18px;border-radius:50%;background:${BRAND};border:3px solid white;box-shadow:0 0 0 1px oklch(0.4 0.14 255 / .35), 0 2px 6px oklch(0 0 0 / .25);position:relative;`;
+  el.style.cssText = `width:18px;height:18px;border-radius:50%;background:${BRAND[theme]};border:3px solid white;box-shadow:0 0 0 1px oklch(0.4 0.14 255 / .35), 0 2px 6px oklch(0 0 0 / .25);position:relative;`;
   const ping = document.createElement("span");
   ping.className = "user-ping";
   el.appendChild(ping);
@@ -100,6 +134,49 @@ function circleGeoJson(
 
 const CIRCLE_SOURCE = "radius-circle";
 
+// (Re)adds the radius source + ring layers to a freshly-loaded style. Called on
+// first map load and again after every theme setStyle() swap, which wipes all
+// custom sources and layers (DOM markers survive). Starts hidden and empty —
+// the ring effect owns data and visibility and re-runs on every styleEpoch.
+function addRadiusLayers(map: maplibregl.Map, theme: ThemeName) {
+  map.addSource(CIRCLE_SOURCE, {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  // Soft fill + dashed outline, painted just under the building layer so
+  // pins and buildings still sit on top.
+  const before = map.getLayer("building-flat") ? "building-flat" : undefined;
+  map.addLayer(
+    {
+      id: "radius-fill",
+      type: "fill",
+      source: CIRCLE_SOURCE,
+      layout: { visibility: "none" },
+      paint: {
+        "fill-color": BRAND_HEX[theme],
+        // The night land is close in lightness to the blue, so the dark fill
+        // needs a touch more opacity to read at all.
+        "fill-opacity": theme === "dark" ? 0.12 : 0.07,
+      },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: "radius-outline",
+      type: "line",
+      source: CIRCLE_SOURCE,
+      layout: { visibility: "none" },
+      paint: {
+        "line-color": BRAND_HEX[theme],
+        "line-width": 1.5,
+        "line-dasharray": [6, 5],
+      },
+    },
+    before,
+  );
+}
+
 export default function ShopMap({
   shops,
   allShops,
@@ -112,6 +189,8 @@ export default function ShopMap({
   recenterKey,
 }: Props) {
   const [lat, lng] = center;
+  const { dark } = useTheme();
+  const theme: ThemeName = dark ? "dark" : "light";
 
   const containerRef = useRef<HTMLDivElement>(null);
   // The map lives in state (not a ref) so reading it during render to anchor the
@@ -156,7 +235,7 @@ export default function ShopMap({
     if (!containerRef.current) return;
     const instance = new maplibregl.Map({
       container: containerRef.current,
-      style: buildStyle(),
+      style: buildStyle(dark),
       center: [lng, lat], // MapLibre is [lng, lat]
       zoom: 13,
       attributionControl: false,
@@ -170,40 +249,9 @@ export default function ShopMap({
     setMap(instance);
 
     instance.on("load", () => {
-      instance.addSource(CIRCLE_SOURCE, {
-        type: "geojson",
-        data: circleGeoJson(lat, lng, radiusKm),
-      });
-      // Soft fill + dashed outline, painted just under the building layer so
-      // pins and buildings still sit on top.
-      const before = instance.getLayer("building-flat") ? "building-flat" : undefined;
-      // Both ring layers start hidden: on first load there's no location yet, so
-      // no ring shows (Issue 4). The recenter effect flips visibility once a
-      // location exists.
-      instance.addLayer(
-        {
-          id: "radius-fill",
-          type: "fill",
-          source: CIRCLE_SOURCE,
-          layout: { visibility: "none" },
-          paint: { "fill-color": BRAND_HEX, "fill-opacity": 0.07 },
-        },
-        before,
-      );
-      instance.addLayer(
-        {
-          id: "radius-outline",
-          type: "line",
-          source: CIRCLE_SOURCE,
-          layout: { visibility: "none" },
-          paint: {
-            "line-color": BRAND_HEX,
-            "line-width": 1.5,
-            "line-dasharray": [6, 5],
-          },
-        },
-        before,
-      );
+      // Both ring layers start hidden: on first load there's no location yet,
+      // so no ring shows. The ring effect below owns data and visibility.
+      addRadiusLayers(instance, dark ? "dark" : "light");
       setReady(true);
     });
 
@@ -223,6 +271,23 @@ export default function ShopMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // --- Theme swap ------------------------------------------------------------
+  // setStyle() replaces every style-owned source and layer (DOM markers
+  // survive), so after the new style loads we re-add the radius layers and bump
+  // styleEpoch, which re-runs the ring effect to restore data + visibility.
+  const prevDarkRef = useRef(dark);
+  const [styleEpoch, setStyleEpoch] = useState(0);
+  useEffect(() => {
+    if (!map || !ready) return;
+    if (prevDarkRef.current === dark) return; // mount or no-op
+    prevDarkRef.current = dark;
+    map.setStyle(buildStyle(dark));
+    map.once("style.load", () => {
+      addRadiusLayers(map, dark ? "dark" : "light");
+      setStyleEpoch((e) => e + 1);
+    });
+  }, [map, ready, dark]);
+
   // --- "You are here" marker + radius ring ----------------------------------
   // Updates the ring geometry, visibility, and user dot. No camera movement —
   // that lives in the dedicated flyTo effect below so the two concerns stay
@@ -233,7 +298,12 @@ export default function ShopMap({
     const src = map.getSource(CIRCLE_SOURCE) as
       | maplibregl.GeoJSONSource
       | undefined;
-    src?.setData(circleGeoJson(lat, lng, radiusKm));
+    // Mid theme-swap the old style (and our layers) are gone and the new ones
+    // aren't in yet; the styleEpoch bump re-runs this effect once they are.
+    if (src === undefined || map.getLayer("radius-outline") === undefined) {
+      return;
+    }
+    src.setData(circleGeoJson(lat, lng, radiusKm));
 
     if (!hasLocation) {
       map.setLayoutProperty("radius-fill", "visibility", "none");
@@ -249,13 +319,15 @@ export default function ShopMap({
 
     if (!userMarkerRef.current) {
       userMarkerRef.current = new maplibregl.Marker({
-        element: userMarkerEl(),
+        element: userMarkerEl(theme),
         pitchAlignment: "map",
       })
         .setLngLat([lng, lat])
         .addTo(map);
     } else {
       userMarkerRef.current.setLngLat([lng, lat]);
+      // Keep the dot on the current theme's primary (cheap idempotent set).
+      userMarkerRef.current.getElement().style.background = BRAND[theme];
     }
 
     // Radius-only change (no new location request): frame the updated ring.
@@ -274,7 +346,9 @@ export default function ShopMap({
       );
       map.fitBounds(bounds, { padding: 40, pitch: 45, bearing: -12, duration: 600 });
     }
-  }, [map, lat, lng, radiusKm, hasLocation, ready]);
+    // styleEpoch re-runs this after a theme swap re-adds the (empty, hidden)
+    // ring layers; theme keeps the user dot's fill current.
+  }, [map, lat, lng, radiusKm, hasLocation, ready, styleEpoch, theme]);
 
   // --- Re-centre on explicit location request --------------------------------
   // Fires whenever recenterKey bumps — every search, GPS tap, or repeated "use
@@ -322,7 +396,7 @@ export default function ShopMap({
       seen.add(shop.id);
       const isSelected = shop.id === selectedShopId;
       const isOut = !visibleIds.has(shop.id);
-      const html = pinSvg(isSelected, isOut);
+      const html = pinSvg(isSelected, isOut, theme);
 
       let marker = markers.get(shop.id);
       if (!marker) {
@@ -343,14 +417,15 @@ export default function ShopMap({
           .addTo(map);
         markers.set(shop.id, marker);
       } else {
-        // Update icon only when state changed (cheap string compare).
+        // Update icon only when state changed (cheap string compare; theme is
+        // part of the state so every pin repaints on a theme toggle).
         const el = marker.getElement();
-        if (el.dataset.state !== `${isSelected}-${isOut}`) {
+        if (el.dataset.state !== `${isSelected}-${isOut}-${theme}`) {
           el.innerHTML = html;
         }
       }
       const el = marker.getElement();
-      el.dataset.state = `${isSelected}-${isOut}`;
+      el.dataset.state = `${isSelected}-${isOut}-${theme}`;
       el.style.zIndex = isSelected ? "1000" : "0";
     }
 
@@ -361,7 +436,7 @@ export default function ShopMap({
         markers.delete(id);
       }
     }
-  }, [map, allShops, shops, selectedShopId, ready]);
+  }, [map, allShops, shops, selectedShopId, ready, theme]);
 
   // --- Popup anchor (re-derived every render, kept pinned via rerender) ------
   const selectedShop =
@@ -386,7 +461,13 @@ export default function ShopMap({
 
   return (
     <div className="relative size-full">
-      <div ref={containerRef} className="size-full" style={{ background: "#f6efd8" }} />
+      <div
+        ref={containerRef}
+        className="size-full"
+        // The theme's land colour shows during GL init / style swap so the
+        // canvas never flashes a mismatched shade.
+        style={{ background: dark ? MAP_BG.dark : MAP_BG.light }}
+      />
 
       <div className="hidden sm:block">{popup}</div>
 

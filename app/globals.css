@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: `.dark` is set on <html> by the pre-hydration script
+   in layout.tsx (system preference, overridable via the theme toggle). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
   findsnus design tokens — "official wayfinding"
   Restrained strategy: pure white surface, one olive-green brand (the seed
@@ -34,10 +38,34 @@
   --shadow-pill: 0 8px 22px -8px oklch(0 0 0 / 0.4);
 }
 
+/*
+  Dark theme: redefine only the semantic token layer. Surfaces are deep slate
+  tinted toward the brand hue (255), with depth carried by lightness steps
+  (bg 0.19 → surface 0.23 → border 0.32), not shadow. Primary is lightened and
+  slightly desaturated so text-primary holds ≥4.5:1 on the dark bg. Mood stays
+  "pharmacy at night": calm and clinical, never neon.
+*/
+.dark {
+  --color-bg: oklch(0.19 0.012 255);
+  --color-surface: oklch(0.23 0.012 255);
+  --color-border: oklch(0.32 0.012 255);
+  --color-border-strong: oklch(0.93 0 0 / 0.3);
+  --color-ink: oklch(0.93 0.004 255);
+  --color-muted: oklch(0.71 0.008 255);
+  --color-primary: oklch(0.64 0.105 255);
+  --color-primary-hover: oklch(0.69 0.105 255);
+  --color-on-primary: oklch(0.14 0.02 255);
+}
+
 @layer base {
   html {
     color-scheme: light;
     background: #f6efd8; /* fills safe-area strips with map land colour */
+  }
+
+  html.dark {
+    color-scheme: dark;
+    background: #232a39; /* MAP_BG.dark — the night basemap's land colour */
   }
 
   body {
@@ -108,7 +136,8 @@
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  border: 2px solid oklch(0.4 0.14 255 / 0.5);
+  /* Follows the theme's primary so the pulse stays visible on the night map. */
+  border: 2px solid color-mix(in oklab, var(--color-primary) 50%, transparent);
   animation: ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 

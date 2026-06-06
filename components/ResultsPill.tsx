@@ -46,7 +46,9 @@ export default function ResultsPill({
         aria-pressed={listOpen}
         aria-expanded={listOpen}
         className={`inline-flex items-center gap-1.5 rounded-full px-[13px] py-1.5 text-xs font-semibold text-bg transition-colors ${
-          listOpen ? "bg-white/[0.30]" : "bg-white/[0.14] hover:bg-white/[0.24]"
+          // bg-bg (not white) so the chip contrasts the ink pill in both
+          // themes: white-on-dark-ink in light mode, dark-on-light in dark.
+          listOpen ? "bg-bg/[0.30]" : "bg-bg/[0.14] hover:bg-bg/[0.24]"
         }`}
       >
         <ListIcon />

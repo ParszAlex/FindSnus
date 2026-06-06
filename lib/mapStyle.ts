@@ -20,11 +20,11 @@ const FONT_REGULAR = ["Stadia Regular"];
 const FONT_SEMIBOLD = ["Stadia Semibold"];
 const FONT_BOLD = ["Stadia Bold"];
 
-// The cartoon palette. Soft, slightly desaturated pastels with enough pop to
-// feel "plastic" but muted enough that the brand-blue pins stay the loudest
-// thing on the map. All sRGB hex (MapLibre paints its own GL canvas and can't
-// read our CSS custom properties).
-const C = {
+// The cartoon palettes — one per theme. Soft, slightly desaturated colours
+// with enough pop to feel "plastic" but muted enough that the brand-blue pins
+// stay the loudest thing on the map. All sRGB hex (MapLibre paints its own GL
+// canvas and can't read our CSS custom properties).
+const LIGHT = {
   water: "#74d2f7", // bright pool blue
   waterDeep: "#3fbef0",
   land: "#f6efd8", // warm cream paper
@@ -39,7 +39,6 @@ const C = {
   motorway: "#ffbf40", // candy-orange trunk roads
   motorwayCasing: "#f59415",
   building: "#f0dcc0", // warm cream (flat + short buildings)
-  buildingTop: "#f6e8d2",
   buildingShade: "#e0c098",
   // Height-graded "toy model" buildings: cream → peach → terracotta as they
   // get taller. Warm hues complement the land and keep the blue pins loudest.
@@ -53,15 +52,53 @@ const C = {
   boundary: "#e89ac0",
 };
 
+// Night variant: the same toy city after dark. Deep desaturated slate land,
+// ink-blue water, pine greens, roads as faintly lit ribbons and a muted amber
+// glow on motorways. Buildings get LIGHTER as they get taller (lit windows),
+// inverting the light theme's warm ramp. Calm and legible — deliberately not
+// the neon "vape shop at night" look the brand bans.
+const DARK: typeof LIGHT = {
+  water: "#27567c",
+  waterDeep: "#1d4364",
+  land: "#232a39", // deep slate — also the dark UI's html/theme colour
+  green: "#2f5444",
+  greenDark: "#28493c",
+  grass: "#35604b",
+  sand: "#4d4738",
+  residential: "#28303f",
+  road: "#46526b", // lit-street ribbons, lighter than the land
+  roadCasing: "#161c28",
+  roadMinor: "#3a4458",
+  motorway: "#c4913f", // muted amber — warm sodium-lamp arterials
+  motorwayCasing: "#7d5a22",
+  building: "#303849",
+  buildingShade: "#1a202c",
+  buildingLow: "#323a4d",
+  buildingMid: "#3e4860",
+  buildingTall: "#4f5a78",
+  buildingXTall: "#626e92",
+  label: "#b6bdcc",
+  labelHalo: "#1b2029",
+  waterLabel: "#7fb6d9",
+  boundary: "#8a6d9c",
+};
+
+// The land colours double as the page background behind the map canvas (html
+// background, theme-color meta, map container) so safe-area strips and tile
+// load-in always blend with the basemap. Single source of truth for all three.
+export const MAP_BG = { light: LIGHT.land, dark: DARK.land } as const;
+
 const STADIA_SOURCE = (key: string) =>
   `https://tiles.stadiamaps.com/data/openmaptiles.json?api_key=${key}`;
 
 /**
  * A hand-built cartoonish MapLibre style on Stadia's OpenMapTiles vector tiles.
  * Includes 3D fill-extrusion buildings (render_height) at high zoom for the
- * "plastic toy" look. Pass the Stadia API key; returns a full StyleSpecification.
+ * "plastic toy" look. Pass the Stadia API key and theme; returns a full
+ * StyleSpecification painted from the matching palette.
  */
-export function cartoonStyle(apiKey: string): StyleSpecification {
+export function cartoonStyle(apiKey: string, dark = false): StyleSpecification {
+  const C = dark ? DARK : LIGHT;
   return {
     version: 8,
     name: "findsnus-cartoon",
@@ -419,8 +456,9 @@ export const FALLBACK_STYLE: StyleSpecification = {
   ],
 };
 
-/** Pick the cartoon Stadia style when a key exists, else the no-key fallback. */
-export function buildStyle(): StyleSpecification {
+/** Pick the cartoon Stadia style when a key exists, else the no-key fallback.
+ *  The raster fallback has no dark variant — it stays light in both themes. */
+export function buildStyle(dark = false): StyleSpecification {
   const key = process.env.NEXT_PUBLIC_STADIA_API_KEY;
-  return key ? cartoonStyle(key) : FALLBACK_STYLE;
+  return key ? cartoonStyle(key, dark) : FALLBACK_STYLE;
 }

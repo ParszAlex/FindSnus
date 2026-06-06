@@ -21,6 +21,7 @@ import MobileSearchPill from "./MobileSearchPill";
 import ResultsPill from "./ResultsPill";
 import ShopList from "./ShopList";
 import SiteFooter from "./SiteFooter";
+import ThemeToggle from "./ThemeToggle";
 
 // MapLibre touches `window` on import, so the map is client-only — never
 // imported on the server. The placeholder keeps the surface calm while it loads.
@@ -222,6 +223,12 @@ export default function Locator() {
           allBrands={popupBrands}
           recenterKey={recenterKey}
         />
+
+        {/* Theme toggle: stacked directly above the zoom card (which sits at
+            bottom 106px mobile / 40px desktop and is 85px tall; 12px gap). */}
+        <div className="absolute right-[18px] bottom-[203px] z-[1000] sm:bottom-[137px]">
+          <ThemeToggle />
+        </div>
 
         {/* Mobile chrome (< sm): glass search pill + Apple Maps bottom sheet */}
         <div className="sm:hidden">
