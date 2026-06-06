@@ -304,7 +304,7 @@ function ListView({
           </ul>
         )}
         {/* iOS home indicator clearance */}
-        <div className="h-[34px]" aria-hidden="true" />
+        <div style={{ height: "env(safe-area-inset-bottom, 34px)" }} aria-hidden="true" />
       </div>
     </>
   );
@@ -449,7 +449,10 @@ function DetailView({ shop, allBrands, onBack }: DetailViewProps) {
       </div>
 
       {/* Footer */}
-      <div className="flex shrink-0 items-center justify-between border-t border-border bg-surface px-4 py-[8px]">
+      <div
+        className="flex shrink-0 items-center justify-between border-t border-border bg-surface px-4 pt-[8px]"
+        style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom, 8px))" }}
+      >
         {shop.verified ? (
           <span className="flex items-center gap-[5px] text-[11px] font-medium text-primary">
             <CheckIcon />
