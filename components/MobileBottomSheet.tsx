@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Listing, ShopWithListings } from "@/lib/shops";
 import { RADIUS_MILES } from "./LocatorControls";
 
@@ -76,6 +76,16 @@ export default function MobileBottomSheet({
     if (selectedShopId !== null) setSheetState("half");
   }, [selectedShopId]);
 
+  // When a fetch completes (loading: true → false) and the user has a location,
+  // snap to half so the shop list becomes visible without a manual drag.
+  const prevLoadingRef = useRef(loading);
+  useEffect(() => {
+    if (prevLoadingRef.current && !loading && hasLocation) {
+      setSheetState("half");
+    }
+    prevLoadingRef.current = loading;
+  }, [loading, hasLocation]);
+
   const showDetail = selectedShopId !== null && sheetState === "half";
   const selectedShop = showDetail
     ? (allShops.find((s) => s.id === selectedShopId) ?? null)
@@ -106,7 +116,7 @@ export default function MobileBottomSheet({
 
   return (
     <div
-      className={`absolute bottom-0 left-0 right-0 z-[30] flex flex-col overflow-hidden rounded-t-[20px] bg-bg shadow-[0_-3px_20px_rgba(0,0,0,0.12)] transition-[height] duration-[380ms] ease-[cubic-bezier(.16,1,.3,1)] ${sheetHeight}`}
+      className={`absolute bottom-0 left-0 right-0 z-[1001] flex flex-col overflow-hidden rounded-t-[20px] bg-bg shadow-[0_-3px_20px_rgba(0,0,0,0.12)] transition-[height] duration-[380ms] ease-[cubic-bezier(.16,1,.3,1)] ${sheetHeight}`}
     >
       {/* Drag handle area */}
       <div

@@ -37,6 +37,7 @@
 @layer base {
   html {
     color-scheme: light;
+    background: oklch(0.955 0.004 120); /* fills safe-area strips with map land colour */
   }
 
   body {
