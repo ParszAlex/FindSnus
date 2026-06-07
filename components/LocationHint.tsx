@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 
 // MobileSearchPill reads nothing from this — the hint owns its own persistence,
-// same pattern as AgeGate owning its storage key.
-export const HINT_STORAGE_KEY = "findsnus:location-hint-dismissed";
+// same pattern as AgeGate owning its storage key. The "-v2" suffix re-shows
+// the hint for early users whose v1 flag was set by an accidental map tap
+// (v1 dismissed on any tap, including map drags).
+export const HINT_STORAGE_KEY = "findsnus:location-hint-dismissed-v2";
+
+// Elements carrying this attribute count as "acting on the hint" — tapping
+// them dismisses it permanently. Everything else (map drags, zoom taps)
+// leaves the hint alone.
+export const HINT_DISMISS_ATTR = "data-location-hint-dismiss";
 
 const SHOW_DELAY_MS = 700; // let the age gate close and the map paint first
-const AUTO_HIDE_MS = 5000;
+const AUTO_HIDE_MS = 12000;
 
 /**
  * One-time coach mark pointing at the GPS button in the mobile search pill.
@@ -15,9 +22,10 @@ const AUTO_HIDE_MS = 5000;
  * nudge that tapping it finds shops near them — and that the browser only asks
  * for location permission on that tap, never on load.
  *
- * Dismissal rules: any tap, Escape, or the X persists the flag (the user has
- * seen and acted past it). The 5s auto-hide only hides for this visit, so a
- * visitor who never interacted gets the tip again next time.
+ * Dismissal rules: the X, Escape, or tapping a HINT_DISMISS_ATTR element (the
+ * GPS button) persists the flag — the user has seen and acted past it. Map
+ * taps and drags do NOT dismiss; the auto-hide only hides for this visit, so
+ * a visitor who never acted on the hint gets it again next time.
  */
 export default function LocationHint() {
   const [visible, setVisible] = useState(false);
@@ -37,8 +45,17 @@ export default function LocationHint() {
     if (!visible) return;
     const timer = window.setTimeout(() => setVisible(false), AUTO_HIDE_MS);
     // Capture phase so a tap on the GPS button both dismisses the hint and
-    // fires geolocation in one go, without any preventDefault games.
-    const onPointerDown = () => dismiss();
+    // fires geolocation in one go, without any preventDefault games. Only
+    // opt-in elements dismiss — map taps/drags must not kill the hint.
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(`[${HINT_DISMISS_ATTR}]`)
+      ) {
+        dismiss();
+      }
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") dismiss();
     };

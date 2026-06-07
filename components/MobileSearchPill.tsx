@@ -192,6 +192,7 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
               type="button"
               onClick={handleGps}
               disabled={locating}
+              data-location-hint-dismiss=""
               aria-busy={locating}
               aria-label={locating ? "Getting your location…" : "Use my location"}
               className={`flex size-11 shrink-0 items-center justify-center rounded-[14px] text-primary ${glassBase} disabled:cursor-not-allowed`}
