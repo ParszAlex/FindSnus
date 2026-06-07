@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import LocationHint from "./LocationHint";
+import { geolocationErrorHint } from "@/lib/geolocationError";
 
 type Props = {
   onLocationChange: (lat: number, lng: number) => void;
@@ -93,9 +94,9 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
         setSubmitted("");
         onLocationChange(pos.coords.latitude, pos.coords.longitude);
       },
-      () => {
+      (err) => {
         setLocating(false);
-        setHint("We couldn't get your location. Enter a postcode instead.");
+        setHint(geolocationErrorHint(err));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );

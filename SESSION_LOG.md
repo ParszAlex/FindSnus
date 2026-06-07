@@ -7,31 +7,12 @@ when it grows past ~200 lines, move the oldest entries into
 start to finish — consult it only when a specific past decision is in
 question.
 
-## 2026-06-06 — Mobile UI: Apple Maps–style layout (Variant A)
-
-- What changed: Added `MobileSearchPill.tsx` (glass floating search pill + GPS button) and `MobileBottomSheet.tsx` (peek/half bottom sheet with list + detail views). Wired into `Locator.tsx` via `sm:hidden` / `hidden sm:block` — mobile shows the new components, desktop keeps the existing card + drawer chrome. `ShopMap.tsx`: popup wrapped in `hidden sm:block` (desktop-only; mobile uses the sheet detail view instead), zoom controls shifted from `bottom-[40px]` to `bottom-[106px] sm:bottom-[40px]` to sit above the peek sheet. `SiteFooter` wrapped in `hidden sm:block` so the map fills the full viewport on mobile.
-- Why: Full Apple Maps–style mobile redesign from `Mobile Locator.html` Variant A. Two parallel subagents built the components, then wired by hand to ensure prop interfaces were consistent.
-- Unsure about / flagged for review: (1) Compliance footer hidden on mobile — age gate still shows, but footer text isn't visible while using the locator. (2) `top-[18px]` for the pill assumes web context — a PWA needs `env(safe-area-inset-top)` to clear the notch. (3) `Mobile Locator.html` sits in the repo root — should be gitignored or moved to `design/`. (4) Bottom sheet `h-[460px]` is fixed — on very short phones the list may not scroll comfortably.
-- What I'd do differently: Should have specified `top-[18px]` in the agent prompt instead of leaving the iOS frame offset (`top-[66px]`) to be fixed post-hoc.
-
-## 2026-06-06 — Re-centre fix (split effects) + UK map bounds
-
-- What changed: `ShopMap.tsx` — split the combined ring/marker/camera effect into two focused effects: Effect A handles ring geometry, visibility, and user dot (no camera); Effect B fires only on `recenterKey` changes and calls `flyTo` using coord refs so lat/lng are NOT in its dep array. This guarantees the flyTo always fires on explicit location requests (GPS, search, repeated taps after panning) without being confused by radius changes or other dep noise. Also added `maxBounds: [[-10.5, 49.5], [2.2, 61.5]]` and `minZoom: 5` to the map init so users can't pan outside UK waters.
-- Why: "Use my location" was not re-centring the map after panning away. Root cause: the previous `prevRecenterKeyRef` mechanism lived in a single effect with many deps; if any other dep changed between taps, the ref was updated without firing flyTo, so the next tap saw a matching ref and skipped the animation. Separating camera into its own effect with a minimal dep array (`[map, ready, hasLocation, recenterKey]`) removes the interference.
-- Unsure about / flagged for review: `maxBounds` clips at 2.2°E which cuts off a small strip east of the UK coast — unlikely to matter for the use case but worth checking if Channel Tunnel / ferry port searches ever come up.
-- What I'd do differently: Should have used the split-effect pattern from the start rather than the `prevRecenterKeyRef` approach.
-
-## 2026-06-06 — Mobile footer + re-centre fix
-
-- What changed: `SiteFooter.tsx` — mobile shows a single compact line ("18+ only · Tobacco-free pouches · Not a shop · © findsnus") via `sm:hidden`; full compliance text is `hidden sm:block`; standalone copyright hidden on mobile to avoid duplication; `py-2 sm:py-3` trims vertical padding. `ShopMap.tsx` + `Locator.tsx` — added `recenterKey` state (bumped on every explicit location request) and `prevRecenterKeyRef` in ShopMap; any location action now always triggers `flyTo` before falling through to the existing `centerChanged`/`fitBounds` logic, so tapping "Use my location" re-centres the map even when GPS returns the same fix.
-- Why: Footer was ~90px tall on mobile, visibly shrinking the map area. Re-centre was broken when panning away and tapping "Use my location" a second time with the same GPS fix.
-- Unsure about / flagged for review: The `centerChanged` branch after the `keyChanged` early-return is now technically unreachable for explicit location requests — it only fires on radius-only changes. Worth a cleanup pass later if the recenter logic grows more complex.
-- What I'd do differently: Nothing significant.
-
-Everything up to 2026-06-06 is in the archive: initial locator build, Stadia
-basemap, MapLibre cartoon-map swap + palette tuning, popup brand-filter fix,
+Older entries are in the archive: initial locator build, Stadia basemap,
+MapLibre cartoon-map swap + palette tuning, popup brand-filter fix,
 Pablo/Killa brand seed, town search + geolocation guard, list-view drawer +
-no-location empty state + smooth fly-in + stuck-loading fix.
+no-location empty state + smooth fly-in + stuck-loading fix, Apple Maps–style
+mobile layout (Variant A), re-centre fix (split effects) + UK map bounds,
+mobile footer + re-centre fix.
 
 ## 2026-06-06 — Pre-launch cleanup + polish
 
@@ -194,3 +175,9 @@ no-location empty state + smooth fly-in + stuck-loading fix.
 - Why: User device-tested on prod: the hint vanished the moment they dragged the map (any-tap dismissal was too eager and persisted forever, so refreshing couldn't bring it back), and 5s felt too short.
 - Unsure about / flagged for review: With map taps no longer dismissing, the only in-flow permanent dismissals are X, Escape, and the GPS button — a user who always searches by postcode will see the hint every visit until 12s elapses or they hit X. Acceptable nudge-pressure for now; add the dismiss attribute to the search pill button if it gets annoying.
 - What I'd do differently: The v1 any-tap dismissal was predictable in hindsight — "tap anywhere" on a map UI means "drag the map", not "acknowledge the tip".
+
+## 2026-06-07 — Actionable geolocation error messages
+- What changed: New `lib/geolocationError.ts` — `geolocationErrorHint(error)` maps `GeolocationPositionError.code` to copy: PERMISSION_DENIED gets an iOS-specific message (Safari aA menu / Settings > Privacy > Location Services, detected via `/iPad|iPhone/` UA test) or a browser-neutral one elsewhere; POSITION_UNAVAILABLE and TIMEOUT get their own copy; unknown codes keep the old generic line. Both error callbacks (`MobileSearchPill.tsx` `handleGps`, `LocatorControls.tsx` `handleUseMyLocation`) now pass the error through the helper instead of discarding it. Verified via Playwright: all four code paths render the right copy (codes 1–3 injected at the API boundary — Playwright can't fire a real instant deny; an ungranted permission just hangs until our 10s timeout, which was also tested end-to-end un-mocked), iPhone-UA variant shows the Safari copy, success path unaffected.
+- Why: Real-world report (user's dad, iPhone Safari): GPS button failed instantly with no permission prompt — a pre-existing denial (Location Services off globally, Safari Websites "Never", or a remembered "Don't Allow"; all surface as code 1 and none can be re-prompted from the page). The old handler discarded the error code and showed the same "We couldn't get your location" for everything, giving no path to recovery.
+- Unsure about / flagged for review: (1) The four root causes are indistinguishable client-side, so the denied copy names both the per-site fix and the global toggle — it's the longest hint we render (~130 chars, wraps to two lines on mobile; checked, no truncation). (2) iPadOS masquerades as macOS in the UA, so iPads get the neutral copy — acceptable, the neutral copy is still correct there. (3) Plan agent evaluated and rejected `navigator.permissions.query`: iOS-Safari-16+ only, and it reports "prompt" (not "denied") when global Location Services is off — useless for the top-ranked cause. (4) Settings path wording varies by iOS version ("Privacy" vs "Privacy & Security"); used the short form findable on both.
+- What I'd do differently: Error callbacks that discard the error argument should be a red flag in review — the bug was built in on day one of each handler.

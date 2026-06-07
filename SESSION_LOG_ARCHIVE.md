@@ -805,3 +805,24 @@ in question.
   was complete, and the orchestrator ran the verification pass.
 - **What I'd do differently:** Run agent verification before the final
   report step so a late crash can't orphan an unverified diff.
+
+## 2026-06-06 — Mobile UI: Apple Maps–style layout (Variant A)
+
+- What changed: Added `MobileSearchPill.tsx` (glass floating search pill + GPS button) and `MobileBottomSheet.tsx` (peek/half bottom sheet with list + detail views). Wired into `Locator.tsx` via `sm:hidden` / `hidden sm:block` — mobile shows the new components, desktop keeps the existing card + drawer chrome. `ShopMap.tsx`: popup wrapped in `hidden sm:block` (desktop-only; mobile uses the sheet detail view instead), zoom controls shifted from `bottom-[40px]` to `bottom-[106px] sm:bottom-[40px]` to sit above the peek sheet. `SiteFooter` wrapped in `hidden sm:block` so the map fills the full viewport on mobile.
+- Why: Full Apple Maps–style mobile redesign from `Mobile Locator.html` Variant A. Two parallel subagents built the components, then wired by hand to ensure prop interfaces were consistent.
+- Unsure about / flagged for review: (1) Compliance footer hidden on mobile — age gate still shows, but footer text isn't visible while using the locator. (2) `top-[18px]` for the pill assumes web context — a PWA needs `env(safe-area-inset-top)` to clear the notch. (3) `Mobile Locator.html` sits in the repo root — should be gitignored or moved to `design/`. (4) Bottom sheet `h-[460px]` is fixed — on very short phones the list may not scroll comfortably.
+- What I'd do differently: Should have specified `top-[18px]` in the agent prompt instead of leaving the iOS frame offset (`top-[66px]`) to be fixed post-hoc.
+
+## 2026-06-06 — Re-centre fix (split effects) + UK map bounds
+
+- What changed: `ShopMap.tsx` — split the combined ring/marker/camera effect into two focused effects: Effect A handles ring geometry, visibility, and user dot (no camera); Effect B fires only on `recenterKey` changes and calls `flyTo` using coord refs so lat/lng are NOT in its dep array. This guarantees the flyTo always fires on explicit location requests (GPS, search, repeated taps after panning) without being confused by radius changes or other dep noise. Also added `maxBounds: [[-10.5, 49.5], [2.2, 61.5]]` and `minZoom: 5` to the map init so users can't pan outside UK waters.
+- Why: "Use my location" was not re-centring the map after panning away. Root cause: the previous `prevRecenterKeyRef` mechanism lived in a single effect with many deps; if any other dep changed between taps, the ref was updated without firing flyTo, so the next tap saw a matching ref and skipped the animation. Separating camera into its own effect with a minimal dep array (`[map, ready, hasLocation, recenterKey]`) removes the interference.
+- Unsure about / flagged for review: `maxBounds` clips at 2.2°E which cuts off a small strip east of the UK coast — unlikely to matter for the use case but worth checking if Channel Tunnel / ferry port searches ever come up.
+- What I'd do differently: Should have used the split-effect pattern from the start rather than the `prevRecenterKeyRef` approach.
+
+## 2026-06-06 — Mobile footer + re-centre fix
+
+- What changed: `SiteFooter.tsx` — mobile shows a single compact line ("18+ only · Tobacco-free pouches · Not a shop · © findsnus") via `sm:hidden`; full compliance text is `hidden sm:block`; standalone copyright hidden on mobile to avoid duplication; `py-2 sm:py-3` trims vertical padding. `ShopMap.tsx` + `Locator.tsx` — added `recenterKey` state (bumped on every explicit location request) and `prevRecenterKeyRef` in ShopMap; any location action now always triggers `flyTo` before falling through to the existing `centerChanged`/`fitBounds` logic, so tapping "Use my location" re-centres the map even when GPS returns the same fix.
+- Why: Footer was ~90px tall on mobile, visibly shrinking the map area. Re-centre was broken when panning away and tapping "Use my location" a second time with the same GPS fix.
+- Unsure about / flagged for review: The `centerChanged` branch after the `keyChanged` early-return is now technically unreachable for explicit location requests — it only fires on radius-only changes. Worth a cleanup pass later if the recenter logic grows more complex.
+- What I'd do differently: Nothing significant.

@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import Wordmark from "./Wordmark";
+import { geolocationErrorHint } from "@/lib/geolocationError";
 
 // Radius is user-facing in miles; <Locator> converts to km for the data layer.
 export const RADIUS_MILES = [1, 3, 5, 10] as const;
@@ -108,9 +109,9 @@ export default function LocatorControls({
         setLocating(false);
         onLocationChange(pos.coords.latitude, pos.coords.longitude);
       },
-      () => {
+      (err) => {
         setLocating(false);
-        setHint("We couldn’t get your location. Enter a postcode instead.");
+        setHint(geolocationErrorHint(err));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
