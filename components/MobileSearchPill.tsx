@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import LocationHint from "./LocationHint";
 
 type Props = {
   onLocationChange: (lat: number, lng: number) => void;
@@ -200,6 +201,8 @@ export default function MobileSearchPill({ onLocationChange, loading }: Props) {
           </>
         )}
       </div>
+
+      {!searchFocused && <LocationHint />}
 
       {hint && (
         <p role="status" className="pointer-events-none text-xs text-muted">
